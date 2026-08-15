@@ -117,3 +117,38 @@ Stage Summary:
 - The "door to the vault" is open. Users can now create an sk_live_ key in the dashboard and immediately use it to call /api/v1/* — they get clean 401/404/405/501 responses with stable error codes and correlation IDs, and every call is audited.
 - The gateway is forward-compatible: implementing a real endpoint is just a matter of adding a handler to the HANDLERS map. The auth/audit/routing/correlation-id infrastructure is all in place.
 - 399 endpoints are documented; 0 are implemented. The /v1/_meta endpoint tells clients exactly which is which.
+
+---
+Task ID: docs-auth-mismatch-fix
+Agent: main
+Task: Verify gateway against OpenAPI spec, fix docs/auth mismatch, add dashboard code snippets
+
+Work Log:
+- User pasted a 17,834-line OpenAPI 3.1 spec for MusicOSY Platform API and asked to verify the gateway against it.
+- Read the spec's securitySchemes section: only `bearerAuth` with `bearerFormat: JWT` was defined. No `apiKeyAuth` scheme existed. Global `security:` block was `bearerAuth: []`.
+- Read the in-app docs (`src/data/api-reference.json`): "Authentication" page said "MusicOSY uses **Bearer JWT** authentication", "Quickstart" example used `Authorization: Bearer YOUR_JWT_TOKEN`.
+- Verified the actual implementation: dashboard issues `sk_live_...` API keys (51 chars, sha-256 hashed at rest), gateway authenticates them via `findApiKeyByRawSecret()`. The OpenAPI spec and in-app docs were BOTH wrong — they said JWT but the system uses API keys.
+- Fixed in-app docs (`scripts/fix-auth-docs.py`):
+  - Rewrote "quickstart" page: uses `sk_live_...` in examples, 3-step quick start (create key → call /v1/_meta → watch usage), documents what's live vs. not-yet-implemented
+  - Rewrote "authentication" page: documents TWO auth schemes — (1) API Keys (sk_live_, primary, server-to-server) and (2) Dashboard Session JWT (end-user, browser only, not accepted by /v1/*). Includes full key lifecycle table, error code reference (401 missing_authorization / invalid_authorization / invalid_api_key, 404 not_found, 405 method_not_allowed, 501 not_implemented), and discoverability note for /v1/_meta
+  - Added new "api-keys" getting-started page: documents key format (sk_live_ + 43 chars base64url), identification (prefix + last four), lifecycle (active/revoked/expired), scopes (read/write/webhooks:write/keys:write — not yet enforced), best practices (one key per env, secret manager, rotate 90d, revoke on compromise, header not query string)
+- Generated corrected OpenAPI spec (`scripts/patch-openapi-spec.py` → `/home/z/my-project/download/openapi.yaml`):
+  - Stripped 1 markdown preamble line + 13 trailing markdown lines from the uploaded file (chat artifacts that broke YAML parsing)
+  - Added `apiKeyAuth` security scheme (type: apiKey, in: header, name: Authorization) with full description documenting sk_live_ format, lifecycle, and storage
+  - Kept `bearerAuth` (JWT) as a secondary scheme for dashboard-only routes, with description clarifying it's NOT accepted by /v1/*
+  - Updated global `security:` block to `[{apiKeyAuth: []}, {bearerAuth: []}]` — apiKeyAuth is primary
+  - Updated info.description to document both auth paths, idempotency, rate limiting, versioning, and the /v1/_meta discovery endpoint
+  - Validated the patched YAML with `yaml.safe_load()`: 328 paths, 28 tags, 2 security schemes, valid OpenAPI 3.1.0
+- Built dashboard code snippets (Priority #3):
+  - Created `src/components/dashboard/CodeSnippet.tsx` — tabbed (curl/JavaScript/Python) code examples with copy-to-clipboard. Interpolates the actual `sk_live_...` secret into the code so users can paste-and-run immediately. Falls back to `sk_live_YOUR_KEY` placeholder when no secret provided.
+  - Wired CodeSnippet into the RevealModal in `KeysList.tsx` — when a user creates or rolls a key, they see a "Show code example" toggle that reveals ready-to-paste curl/JS/Python hitting /v1/_meta with their new key
+  - Added a "Quick start" card to the dashboard overview page (`src/app/dashboard/page.tsx`) with a CodeSnippet showing /v1/_meta as the first call to make
+  - Created `src/components/dashboard/WebhookVerifySnippet.tsx` — tabbed (Node.js/Python/Go) HMAC-SHA256 signature verification code. Uses `crypto.timingSafeEqual` / `hmac.compare_digest` / `hmac.Equal` to prevent timing attacks. Interpolates the actual `whsec_...` secret.
+  - Wired WebhookVerifySnippet into the RevealSecretModal in `src/app/dashboard/webhooks/page.tsx` — when a user creates a webhook, they see a "Show signature verification code" toggle that reveals ready-to-paste verification code in their language of choice
+- Ran `npx tsc --noEmit` — zero errors in `src/` (all errors are in `repos/` and `examples/` reference directories, not part of the build)
+
+Stage Summary:
+- OpenAPI spec and in-app docs now match the actual implementation: `sk_live_` API keys are the primary auth scheme for /v1/*, dashboard JWT is documented as secondary (browser-only, not accepted by /v1/*).
+- Corrected OpenAPI spec saved to `/home/z/my-project/download/openapi.yaml` — valid YAML, 328 paths, both security schemes defined.
+- Dashboard now shows ready-to-paste code snippets (curl/JS/Python) on key creation/roll, and HMAC-SHA256 verification code (Node/Python/Go) on webhook creation. All snippets use the actual secret so users can test immediately.
+- Three priority items from the user's roadmap are now complete: (1) Consumer API Gateway ✅, (2) Docs/Auth Mismatch Fixed ✅, (3) Dashboard Snippets Added ✅. Caching layer (Redis token-bucket for rate limits) remains as future work.

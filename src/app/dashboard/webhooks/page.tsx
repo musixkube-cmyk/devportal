@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Copy, Check, Plus, Trash2, Webhook, Power } from "lucide-react";
+import { Copy, Check, Plus, Trash2, Webhook, Power, ShieldCheck } from "lucide-react";
+import { WebhookVerifySnippet } from "@/components/dashboard/WebhookVerifySnippet";
 
 type Webhook = {
   id: string;
@@ -409,6 +410,7 @@ function RevealSecretModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [showVerify, setShowVerify] = useState(false);
 
   async function copy() {
     try {
@@ -446,6 +448,22 @@ function RevealSecretModal({
             </button>
           </div>
         </div>
+
+        {/* Signature verification snippet */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowVerify((v) => !v)}
+            className="flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ShieldCheck className="size-3.5" />
+            {showVerify ? "Hide verification code" : "Show signature verification code"}
+          </button>
+          {showVerify && (
+            <WebhookVerifySnippet secret={created.rawSecret} />
+          )}
+        </div>
+
         <div className="flex justify-end border-t border-border pt-4">
           <button
             onClick={onClose}

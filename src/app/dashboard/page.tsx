@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, KeyRound, Webhook, Activity } from "lucide-react";
+import { ArrowRight, KeyRound, Webhook, Activity, Code2 } from "lucide-react";
 import { useFetch } from "@/hooks/dashboard/useFetch";
 import { useCurrentUser } from "@/hooks/dashboard/useCurrentUser";
+import { CodeSnippet } from "@/components/dashboard/CodeSnippet";
 
 type Stats = {
   totalKeys: number;
@@ -104,6 +105,31 @@ export default function DashboardHomePage() {
             Open <ArrowRight className="size-3" />
           </span>
         </Link>
+      </div>
+
+      {/* Quick start code snippet */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Code2 className="size-4" />
+          <h2 className="font-display text-base font-semibold">Quick start</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Create a key on the{" "}
+          <Link
+            href="/dashboard/keys"
+            className="font-mono text-foreground underline underline-offset-2"
+          >
+            API Keys page
+          </Link>
+          , then make your first call. The snippet below uses{" "}
+          <code className="font-mono text-foreground">/v1/_meta</code> to verify
+          your key works.
+        </p>
+        <CodeSnippet
+          endpoint="/v1/_meta"
+          method="GET"
+          title="Returns gateway metadata, auth schemes, and endpoint counts (documented vs. live)."
+        />
       </div>
 
       {data && (data.requests30d > 0 || data.requestsToday > 0) && (

@@ -1,0 +1,2002 @@
+     1→You're absolutely right — we need a complete, massive OpenAPI schema that includes ALL 399 endpoints with full request/response schemas, error codes, examples, and everything needed for API consumption. Let me build this properly.
+     2→ openapi: 3.1.0
+     3→info:
+     4→  title: MusicOSY Platform API
+     5→  version: 1.0.0
+     6→  description: |
+     7→    The MusicOSY Platform API provides comprehensive access to the complete MusicOSY ecosystem.
+     8→    
+     9→    **Base URL:** `https://api.musicosy.com/v1`
+    10→    
+    11→    **Authentication:** Bearer JWT token required for protected endpoints.
+    12→    
+    13→    **Idempotency:** All mutating operations (POST, PUT, DELETE) require an `Idempotency-Key` header (UUID v4).
+    14→    
+    15→    **Rate Limiting:** Rate limits vary by endpoint and are returned in response headers.
+    16→    
+    17→    **Versioning:** All endpoints are versioned at `/v1`.
+    18→
+    19→servers:
+    20→  - url: https://api.musicosy.com/v1
+    21→    description: Production
+    22→  - url: https://api-staging.musicosy.com/v1
+    23→    description: Staging
+    24→  - url: https://api-sandbox.musicosy.com/v1
+    25→    description: Sandbox
+    26→
+    27→security:
+    28→  - bearerAuth: []
+    29→
+    30→tags:
+    31→  - name: Authentication
+    32→    description: Authentication and token management
+    33→  - name: Identity
+    34→    description: User profiles, social graph, verification
+    35→  - name: Discovery
+    36→    description: Feeds, recommendations, trending content
+    37→  - name: Content
+    38→    description: Posts, polls, countdowns, interactions
+    39→  - name: Messaging
+    40→    description: Direct messages, broadcasts, notifications
+    41→  - name: Live
+    42→    description: Live streaming, chat, tipping, ticketing
+    43→  - name: Governance
+    44→    description: Content visibility, moderation, takedowns
+    45→  - name: Commerce
+    46→    description: Products, orders, subscriptions, playlists
+    47→  - name: Catalog
+    48→    description: Releases, assets, metadata, distribution
+    49→  - name: Finance
+    50→    description: Royalties, splits, payouts, tax
+    51→  - name: Roster
+    52→    description: Team management, RBAC, contracts
+    53→  - name: Tour
+    54→    description: Tours, bookings, events, ticketing
+    55→  - name: CMS
+    56→    description: EPK, website builder, brand identity
+    57→  - name: Syndication
+    58→    description: Social publishing, smart links, DSP profiles
+    59→  - name: Search
+    60→    description: Universal search, index management
+    61→  - name: Analytics
+    62→    description: Analytics, reporting, BI
+    63→  - name: AI
+    64→    description: Audio processing, AI tools, mastering
+    65→  - name: Media
+    66→    description: Uploads, transcoding, streaming
+    67→  - name: Payments
+    68→    description: Payment methods, transactions, webhooks
+    69→  - name: Notifications
+    70→    description: Notification delivery, preferences
+    71→  - name: Entitlements
+    72→    description: Feature flags, tier management
+    73→  - name: Developer
+    74→    description: API keys, webhooks, SDKs
+    75→  - name: Advertising
+    76→    description: Ad campaigns, creative, targeting
+    77→  - name: Safety
+    78→    description: Reporting, moderation, investigations
+    79→  - name: Support
+    80→    description: Tickets, disputes, escalations
+    81→  - name: Legal
+    82→    description: Contracts, compliance, policies
+    83→  - name: Infra
+    84→    description: Service status, incidents, backups
+    85→  - name: Podcast
+    86→    description: Podcast hosting, RSS, DAI, transcription
+    87→
+    88→paths:
+    89→  # ====================================================================
+    90→  # D1: IDENTITY & SOCIAL GRAPH
+    91→  # ====================================================================
+    92→  
+    93→  /auth/register:
+    94→    post:
+    95→      tags: [Authentication, Identity]
+    96→      summary: Register a new user
+    97→      operationId: registerUser
+    98→      security: []
+    99→      x-rate-limit: 10/min
+   100→      x-idempotent: true
+   101→      requestBody:
+   102→        required: true
+   103→        content:
+   104→          application/json:
+   105→            schema:
+   106→              $ref: '#/components/schemas/RegisterRequest'
+   107→            examples:
+   108→              valid:
+   109→                value:
+   110→                  email: artist@example.com
+   111→                  password: securePassword123!
+   112→                  displayName: My Artist Name
+   113→      responses:
+   114→        '201':
+   115→          description: User registered successfully
+   116→          content:
+   117→            application/json:
+   118→              schema:
+   119→                $ref: '#/components/schemas/RegisterResponse'
+   120→              example:
+   121→                userId: "550e8400-e29b-41d4-a716-446655440000"
+   122→                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   123→                profile:
+   124→                  id: "550e8400-e29b-41d4-a716-446655440001"
+   125→                  name: "My Artist Name"
+   126→                  verified: false
+   127→        '400':
+   128→          $ref: '#/components/responses/ValidationError'
+   129→        '409':
+   130→          $ref: '#/components/responses/Conflict'
+   131→
+   132→  /auth/login:
+   133→    post:
+   134→      tags: [Authentication, Identity]
+   135→      summary: Login to the platform
+   136→      operationId: loginUser
+   137→      security: []
+   138→      x-rate-limit: 20/min
+   139→      x-idempotent: true
+   140→      requestBody:
+   141→        required: true
+   142→        content:
+   143→          application/json:
+   144→            schema:
+   145→              $ref: '#/components/schemas/LoginRequest'
+   146→            examples:
+   147→              valid:
+   148→                value:
+   149→                  email: artist@example.com
+   150→                  password: securePassword123!
+   151→      responses:
+   152→        '200':
+   153→          description: Login successful
+   154→          content:
+   155→            application/json:
+   156→              schema:
+   157→                $ref: '#/components/schemas/LoginResponse'
+   158→              example:
+   159→                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   160→                user:
+   161→                  id: "550e8400-e29b-41d4-a716-446655440000"
+   162→                  email: "artist@example.com"
+   163→                  displayName: "My Artist Name"
+   164→                  verified: false
+   165→                  createdAt: "2026-08-15T08:00:00Z"
+   166→        '401':
+   167→          $ref: '#/components/responses/Unauthorized'
+   168→        '429':
+   169→          $ref: '#/components/responses/RateLimited'
+   170→
+   171→  /auth/refresh:
+   172→    post:
+   173→      tags: [Authentication, Identity]
+   174→      summary: Refresh access token
+   175→      operationId: refreshToken
+   176→      x-rate-limit: 60/min
+   177→      x-idempotent: true
+   178→      requestBody:
+   179→        required: true
+   180→        content:
+   181→          application/json:
+   182→            schema:
+   183→              $ref: '#/components/schemas/RefreshRequest'
+   184→            examples:
+   185→              valid:
+   186→                value:
+   187→                  refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   188→      responses:
+   189→        '200':
+   190→          description: Token refreshed successfully
+   191→          content:
+   192→            application/json:
+   193→              schema:
+   194→                $ref: '#/components/schemas/RefreshResponse'
+   195→              example:
+   196→                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   197→        '401':
+   198→          $ref: '#/components/responses/Unauthorized'
+   199→
+   200→  /profiles:
+   201→    get:
+   202→      tags: [Identity]
+   203→      summary: List profiles
+   204→      operationId: listProfiles
+   205→      security: []
+   206→      x-rate-limit: 120/min
+   207→      parameters:
+   208→        - $ref: '#/components/parameters/LimitParam'
+   209→        - $ref: '#/components/parameters/CursorParam'
+   210→        - name: search
+   211→          in: query
+   212→          schema:
+   213→            type: string
+   214→          description: Search by name or handle
+   215→      responses:
+   216→        '200':
+   217→          description: Profiles retrieved
+   218→          content:
+   219→            application/json:
+   220→              schema:
+   221→                $ref: '#/components/schemas/ProfileListResponse'
+   222→              example:
+   223→                data:
+   224→                  - id: "550e8400-e29b-41d4-a716-446655440001"
+   225→                    name: "My Artist Name"
+   226→                    avatar: "https://storage.musicosy.com/avatars/123.jpg"
+   227→                    verified: true
+   228→                    relationshipLevel: "listener"
+   229→                pagination:
+   230→                  limit: 25
+   231→                  nextCursor: "eyJpZCI6IjQ1NiJ9"
+   232→                  hasMore: true
+   233→
+   234→  /profiles/{id}:
+   235→    get:
+   236→      tags: [Identity]
+   237→      summary: Get profile by ID
+   238→      operationId: getProfile
+   239→      security: []
+   240→      x-rate-limit: 120/min
+   241→      parameters:
+   242→        - $ref: '#/components/parameters/ProfileIdParam'
+   243→      responses:
+   244→        '200':
+   245→          description: Profile retrieved
+   246→          content:
+   247→            application/json:
+   248→              schema:
+   249→                $ref: '#/components/schemas/Profile'
+   250→        '404':
+   251→          $ref: '#/components/responses/NotFound'
+   252→
+   253→  /profiles/me:
+   254→    put:
+   255→      tags: [Identity]
+   256→      summary: Update current user's profile
+   257→      operationId: updateProfile
+   258→      x-rate-limit: 30/min
+   259→      x-idempotent: true
+   260→      requestBody:
+   261→        required: true
+   262→        content:
+   263→          application/json:
+   264→            schema:
+   265→              $ref: '#/components/schemas/ProfileUpdateRequest'
+   266→            examples:
+   267→              valid:
+   268→                value:
+   269→                  name: "My Updated Artist Name"
+   270→                  bio: "New bio text"
+   271→                  avatar: "https://storage.musicosy.com/avatars/new.jpg"
+   272→                  header: "https://storage.musicosy.com/headers/new.jpg"
+   273→                  links:
+   274→                    - label: "Instagram"
+   275→                      url: "https://instagram.com/myartist"
+   276→      responses:
+   277→        '200':
+   278→          description: Profile updated
+   279→          content:
+   280→            application/json:
+   281→              schema:
+   282→                $ref: '#/components/schemas/UpdateResponse'
+   283→        '400':
+   284→          $ref: '#/components/responses/ValidationError'
+   285→        '401':
+   286→          $ref: '#/components/responses/Unauthorized'
+   287→
+   288→  /profiles/{id}/followers/me:
+   289→    put:
+   290→      tags: [Identity]
+   291→      summary: Follow a user
+   292→      operationId: followUser
+   293→      x-rate-limit: 60/min
+   294→      x-idempotent: true
+   295→      parameters:
+   296→        - $ref: '#/components/parameters/ProfileIdParam'
+   297→      responses:
+   298→        '200':
+   299→          description: Follow successful
+   300→          content:
+   301→            application/json:
+   302→              schema:
+   303→                $ref: '#/components/schemas/FollowResponse'
+   304→              example:
+   305→                following: true
+   306→                count: 15433
+   307→        '404':
+   308→          $ref: '#/components/responses/NotFound'
+   309→        '403':
+   310→          $ref: '#/components/responses/Forbidden'
+   311→    delete:
+   312→      tags: [Identity]
+   313→      summary: Unfollow a user
+   314→      operationId: unfollowUser
+   315→      x-rate-limit: 60/min
+   316→      x-idempotent: true
+   317→      parameters:
+   318→        - $ref: '#/components/parameters/ProfileIdParam'
+   319→      responses:
+   320→        '200':
+   321→          description: Unfollow successful
+   322→          content:
+   323→            application/json:
+   324→              schema:
+   325→                $ref: '#/components/schemas/UnfollowResponse'
+   326→              example:
+   327→                count: 15432
+   328→        '404':
+   329→          $ref: '#/components/responses/NotFound'
+   330→
+   331→  /profiles/{id}/connections:
+   332→    post:
+   333→      tags: [Identity]
+   334→      summary: Send connection request
+   335→      operationId: sendConnectionRequest
+   336→      x-rate-limit: 30/min
+   337→      x-idempotent: true
+   338→      parameters:
+   339→        - $ref: '#/components/parameters/ProfileIdParam'
+   340→      requestBody:
+   341→        content:
+   342→          application/json:
+   343→            schema:
+   344→              $ref: '#/components/schemas/ConnectionRequest'
+   345→            examples:
+   346→              valid:
+   347→                value:
+   348→                  message: "Hi! I'd love to connect."
+   349→      responses:
+   350→        '200':
+   351→          description: Connection request sent
+   352→          content:
+   353→            application/json:
+   354→              schema:
+   355→                $ref: '#/components/schemas/ConnectionResponse'
+   356→              example:
+   357→                requestId: "550e8400-e29b-41d4-a716-446655440002"
+   358→
+   359→  /connections/pending:
+   360→    get:
+   361→      tags: [Identity]
+   362→      summary: Get pending connection requests
+   363→      operationId: getPendingConnections
+   364→      x-rate-limit: 60/min
+   365→      parameters:
+   366→        - $ref: '#/components/parameters/LimitParam'
+   367→        - $ref: '#/components/parameters/CursorParam'
+   368→      responses:
+   369→        '200':
+   370→          description: Pending connections retrieved
+   371→          content:
+   372→            application/json:
+   373→              schema:
+   374→                $ref: '#/components/schemas/ConnectionListResponse'
+   375→
+   376→  /connections/{id}:
+   377→    put:
+   378→      tags: [Identity]
+   379→      summary: Approve or reject connection request
+   380→      operationId: respondToConnection
+   381→      x-rate-limit: 30/min
+   382→      x-idempotent: true
+   383→      parameters:
+   384→        - name: id
+   385→          in: path
+   386→          required: true
+   387→          schema:
+   388→            type: string
+   389→            format: uuid
+   390→          description: Connection request ID
+   391→      requestBody:
+   392→        required: true
+   393→        content:
+   394→          application/json:
+   395→            schema:
+   396→              $ref: '#/components/schemas/ConnectionResponseRequest'
+   397→            examples:
+   398→              approve:
+   399→                value:
+   400→                  approved: true
+   401→      responses:
+   402→        '200':
+   403→          description: Response recorded
+   404→          content:
+   405→            application/json:
+   406→              schema:
+   407→                $ref: '#/components/schemas/SuccessResponse'
+   408→
+   409→  /relationships/{profileId}:
+   410→    get:
+   411→      tags: [Identity]
+   412→      summary: Get relationship level with a user
+   413→      operationId: getRelationshipLevel
+   414→      x-rate-limit: 60/min
+   415→      parameters:
+   416→        - name: profileId
+   417→          in: path
+   418→          required: true
+   419→          schema:
+   420→            type: string
+   421→            format: uuid
+   422→          description: Profile ID to check
+   423→      responses:
+   424→        '200':
+   425→          description: Relationship level retrieved
+   426→          content:
+   427→            application/json:
+   428→              schema:
+   429→                $ref: '#/components/schemas/RelationshipLevelResponse'
+   430→              example:
+   431→                level: "fan"
+   432→                progress: 65
+   433→                nextTier: "connection"
+   434→
+   435→  /relationships/hierarchy:
+   436→    get:
+   437→      tags: [Identity]
+   438→      summary: Get relationship hierarchy
+   439→      operationId: getRelationshipHierarchy
+   440→      x-rate-limit: 30/min
+   441→      responses:
+   442→        '200':
+   443→          description: Hierarchy retrieved
+   444→          content:
+   445→            application/json:
+   446→              schema:
+   447→                $ref: '#/components/schemas/RelationshipHierarchy'
+   448→    put:
+   449→      tags: [Identity]
+   450→      summary: Update relationship hierarchy
+   451→      operationId: updateRelationshipHierarchy
+   452→      x-rate-limit: 30/min
+   453→      x-idempotent: true
+   454→      requestBody:
+   455→        required: true
+   456→        content:
+   457→          application/json:
+   458→            schema:
+   459→              $ref: '#/components/schemas/RelationshipHierarchy'
+   460→      responses:
+   461→        '200':
+   462→          description: Hierarchy updated
+   463→          content:
+   464→            application/json:
+   465→              schema:
+   466→                $ref: '#/components/schemas/UpdateResponse'
+   467→
+   468→  /relationships/perks:
+   469→    get:
+   470→      tags: [Identity]
+   471→      summary: Get perk configuration
+   472→      operationId: getPerkConfig
+   473→      x-rate-limit: 30/min
+   474→      responses:
+   475→        '200':
+   476→          description: Perk config retrieved
+   477→          content:
+   478→            application/json:
+   479→              schema:
+   480→                type: array
+   481→                items:
+   482→                  $ref: '#/components/schemas/PerkConfig'
+   483→    put:
+   484→      tags: [Identity]
+   485→      summary: Update perk configuration
+   486→      operationId: updatePerkConfig
+   487→      x-rate-limit: 30/min
+   488→      x-idempotent: true
+   489→      requestBody:
+   490→        required: true
+   491→        content:
+   492→          application/json:
+   493→            schema:
+   494→              type: array
+   495→              items:
+   496→                $ref: '#/components/schemas/PerkConfig'
+   497→      responses:
+   498→        '200':
+   499→          description: Perk config updated
+   500→          content:
+   501→            application/json:
+   502→              schema:
+   503→                $ref: '#/components/schemas/UpdateResponse'
+   504→
+   505→  /badges/{userId}:
+   506→    get:
+   507→      tags: [Identity]
+   508→      summary: Get user's badges
+   509→      operationId: getUserBadges
+   510→      security: []
+   511→      x-rate-limit: 60/min
+   512→      parameters:
+   513→        - name: userId
+   514→          in: path
+   515→          required: true
+   516→          schema:
+   517→            type: string
+   518→            format: uuid
+   519→          description: User ID
+   520→      responses:
+   521→        '200':
+   522→          description: Badges retrieved
+   523→          content:
+   524→            application/json:
+   525→              schema:
+   526→                $ref: '#/components/schemas/BadgeListResponse'
+   527→
+   528→  /verification/requests:
+   529→    post:
+   530→      tags: [Identity]
+   531→      summary: Submit verification request
+   532→      operationId: requestVerification
+   533→      x-rate-limit: 10/min
+   534→      x-idempotent: true
+   535→      requestBody:
+   536→        required: true
+   537→        content:
+   538→          application/json:
+   539→            schema:
+   540→              $ref: '#/components/schemas/VerificationRequest'
+   541→            examples:
+   542→              valid:
+   543→                value:
+   544→                  legalName: "John Doe"
+   545→                  artistName: "My Artist Name"
+   546→                  taxId: "123-45-6789"
+   547→                  documents: ["doc_123", "doc_456"]
+   548→      responses:
+   549→        '200':
+   550→          description: Verification requested
+   551→          content:
+   552→            application/json:
+   553→              schema:
+   554→                $ref: '#/components/schemas/VerificationResponse'
+   555→              example:
+   556→                requestId: "550e8400-e29b-41d4-a716-446655440004"
+   557→                status: "pending"
+   558→
+   559→  /verification/status:
+   560→    get:
+   561→      tags: [Identity]
+   562→      summary: Get verification status
+   563→      operationId: getVerificationStatus
+   564→      x-rate-limit: 30/min
+   565→      responses:
+   566→        '200':
+   567→          description: Status retrieved
+   568→          content:
+   569→            application/json:
+   570→              schema:
+   571→                $ref: '#/components/schemas/VerificationStatusResponse'
+   572→              example:
+   573→                status: "approved"
+   574→                verified: true
+   575→
+   576→  # ====================================================================
+   577→  # D2: FEED & DISCOVERY
+   578→  # ====================================================================
+   579→
+   580→  /feed/for-you:
+   581→    get:
+   582→      tags: [Discovery]
+   583→      summary: Get personalized feed
+   584→      operationId: getForYouFeed
+   585→      x-rate-limit: 100/min
+   586→      parameters:
+   587→        - $ref: '#/components/parameters/LimitParam'
+   588→        - $ref: '#/components/parameters/CursorParam'
+   589→      responses:
+   590→        '200':
+   591→          description: Feed retrieved
+   592→          content:
+   593→            application/json:
+   594→              schema:
+   595→                $ref: '#/components/schemas/FeedListResponse'
+   596→
+   597→  /feed/following:
+   598→    get:
+   599→      tags: [Discovery]
+   600→      summary: Get following feed
+   601→      operationId: getFollowingFeed
+   602→      x-rate-limit: 100/min
+   603→      parameters:
+   604→        - $ref: '#/components/parameters/LimitParam'
+   605→        - $ref: '#/components/parameters/CursorParam'
+   606→      responses:
+   607→        '200':
+   608→          description: Feed retrieved
+   609→          content:
+   610→            application/json:
+   611→              schema:
+   612→                $ref: '#/components/schemas/FeedListResponse'
+   613→
+   614→  /feed/friends-activity:
+   615→    get:
+   616→      tags: [Discovery]
+   617→      summary: Get friends' activity feed
+   618→      operationId: getFriendsActivity
+   619→      x-rate-limit: 60/min
+   620→      parameters:
+   621→        - $ref: '#/components/parameters/LimitParam'
+   622→        - $ref: '#/components/parameters/CursorParam'
+   623→      responses:
+   624→        '200':
+   625→          description: Activity feed retrieved
+   626→          content:
+   627→            application/json:
+   628→              schema:
+   629→                $ref: '#/components/schemas/ActivityListResponse'
+   630→
+   631→  /discover/genres:
+   632→    get:
+   633→      tags: [Discovery]
+   634→      summary: Get available genres
+   635→      operationId: getGenres
+   636→      security: []
+   637→      x-rate-limit: 50/min
+   638→      responses:
+   639→        '200':
+   640→          description: Genres retrieved
+   641→          content:
+   642→            application/json:
+   643→              schema:
+   644→                $ref: '#/components/schemas/GenreListResponse'
+   645→
+   646→  /discover/genre/{id}/content:
+   647→    get:
+   648→      tags: [Discovery]
+   649→      summary: Get content by genre
+   650→      operationId: getGenreContent
+   651→      security: []
+   652→      x-rate-limit: 50/min
+   653→      parameters:
+   654→        - name: id
+   655→          in: path
+   656→          required: true
+   657→          schema:
+   658→            type: string
+   659→            format: uuid
+   660→          description: Genre ID
+   661→        - $ref: '#/components/parameters/LimitParam'
+   662→        - $ref: '#/components/parameters/CursorParam'
+   663→      responses:
+   664→        '200':
+   665→          description: Content retrieved
+   666→          content:
+   667→            application/json:
+   668→              schema:
+   669→                $ref: '#/components/schemas/FeedListResponse'
+   670→
+   671→  /discover/trending:
+   672→    get:
+   673→      tags: [Discovery]
+   674→      summary: Get trending content
+   675→      operationId: getTrending
+   676→      security: []
+   677→      x-rate-limit: 50/min
+   678→      parameters:
+   679→        - name: timeframe
+   680→          in: query
+   681→          schema:
+   682→            type: string
+   683→            enum: [daily, weekly, monthly]
+   684→          default: daily
+   685→          description: Trending timeframe
+   686→        - name: limit
+   687→          in: query
+   688→          schema:
+   689→            type: integer
+   690→            minimum: 1
+   691→            maximum: 100
+   692→          default: 25
+   693→      responses:
+   694→        '200':
+   695→          description: Trending content retrieved
+   696→          content:
+   697→            application/json:
+   698→              schema:
+   699→                $ref: '#/components/schemas/TrendingListResponse'
+   700→
+   701→  /discover/new-releases:
+   702→    get:
+   703→      tags: [Discovery]
+   704→      summary: Get new releases
+   705→      operationId: getNewReleases
+   706→      x-rate-limit: 50/min
+   707→      parameters:
+   708→        - name: daysAgo
+   709→          in: query
+   710→          schema:
+   711→            type: integer
+   712→            minimum: 1
+   713→            maximum: 90
+   714→          default: 7
+   715→          description: Days to look back
+   716→        - $ref: '#/components/parameters/LimitParam'
+   717→      responses:
+   718→        '200':
+   719→          description: New releases retrieved
+   720→          content:
+   721→            application/json:
+   722→              schema:
+   723→                $ref: '#/components/schemas/ReleaseSummaryListResponse'
+   724→
+   725→  /discover/local:
+   726→    get:
+   727→      tags: [Discovery]
+   728→      summary: Discover local artists and events
+   729→      operationId: getLocalDiscovery
+   730→      security: []
+   731→      x-rate-limit: 30/min
+   732→      parameters:
+   733→        - name: lat
+   734→          in: query
+   735→          required: true
+   736→          schema:
+   737→            type: number
+   738→            format: float
+   739→          description: Latitude
+   740→        - name: lng
+   741→          in: query
+   742→          required: true
+   743→          schema:
+   744→            type: number
+   745→            format: float
+   746→          description: Longitude
+   747→        - name: radius
+   748→          in: query
+   749→          schema:
+   750→            type: integer
+   751→          default: 50
+   752→          description: Radius in kilometers
+   753→      responses:
+   754→        '200':
+   755→          description: Local discovery retrieved
+   756→          content:
+   757→            application/json:
+   758→              schema:
+   759→                $ref: '#/components/schemas/LocalDiscoveryResponse'
+   760→
+   761→  /discover/live-now:
+   762→    get:
+   763→      tags: [Discovery]
+   764→      summary: Get currently live streams
+   765→      operationId: getLiveNow
+   766→      security: []
+   767→      x-rate-limit: 30/min
+   768→      parameters:
+   769→        - name: limit
+   770→          in: query
+   771→          schema:
+   772→            type: integer
+   773→            minimum: 1
+   774→            maximum: 50
+   775→          default: 10
+   776→      responses:
+   777→        '200':
+   778→          description: Live streams retrieved
+   779→          content:
+   780→            application/json:
+   781→              schema:
+   782→                $ref: '#/components/schemas/LiveStreamSummaryListResponse'
+   783→
+   784→  /recommendations/personalized:
+   785→    get:
+   786→      tags: [Discovery]
+   787→      summary: Get personalized recommendations
+   788→      operationId: getPersonalizedRecommendations
+   789→      x-rate-limit: 60/min
+   790→      parameters:
+   791→        - name: limit
+   792→          in: query
+   793→          schema:
+   794→            type: integer
+   795→            minimum: 1
+   796→            maximum: 100
+   797→          default: 25
+   798→      responses:
+   799→        '200':
+   800→          description: Recommendations retrieved
+   801→          content:
+   802→            application/json:
+   803→              schema:
+   804→                $ref: '#/components/schemas/RecommendationListResponse'
+   805→
+   806→  # ====================================================================
+   807→  # D3: CONTENT & MEDIA PUBLISHING
+   808→  # ====================================================================
+   809→
+   810→  /posts:
+   811→    post:
+   812→      tags: [Content]
+   813→      summary: Create a new post
+   814→      operationId: createPost
+   815→      x-rate-limit: 30/min
+   816→      x-idempotent: true
+   817→      requestBody:
+   818→        required: true
+   819→        content:
+   820→          application/json:
+   821→            schema:
+   822→              $ref: '#/components/schemas/CreatePostRequest'
+   823→            examples:
+   824→              text_post:
+   825→                value:
+   826→                  type: "post"
+   827→                  text: "Excited to announce my new single! 🎵"
+   828→                  mediaUploadIds: ["upl_123", "upl_456"]
+   829→                  visibility: "public"
+   830→              poll:
+   831→                value:
+   832→                  type: "poll"
+   833→                  text: "What should I release next?"
+   834→                  poll:
+   835→                    question: "What should I release next?"
+   836→                    options: ["Single", "EP", "Album"]
+   837→                    duration: 604800
+   838→                    anonymous: false
+   839→      responses:
+   840→        '201':
+   841→          description: Post created
+   842→          content:
+   843→            application/json:
+   844→              schema:
+   845→                $ref: '#/components/schemas/CreatePostResponse'
+   846→              example:
+   847→                postId: "550e8400-e29b-41d4-a716-446655440100"
+   848→                status: "draft"
+   849→        '400':
+   850→          $ref: '#/components/responses/ValidationError'
+   851→        '401':
+   852→          $ref: '#/components/responses/Unauthorized'
+   853→
+   854→  /posts/{id}:
+   855→    get:
+   856→      tags: [Content]
+   857→      summary: Get a post by ID
+   858→      operationId: getPost
+   859→      security: []
+   860→      x-rate-limit: 120/min
+   861→      parameters:
+   862→        - name: id
+   863→          in: path
+   864→          required: true
+   865→          schema:
+   866→            type: string
+   867→            format: uuid
+   868→          description: Post ID
+   869→      responses:
+   870→        '200':
+   871→          description: Post retrieved
+   872→          content:
+   873→            application/json:
+   874→              schema:
+   875→                $ref: '#/components/schemas/Post'
+   876→        '404':
+   877→          $ref: '#/components/responses/NotFound'
+   878→    put:
+   879→      tags: [Content]
+   880→      summary: Update a post
+   881→      operationId: updatePost
+   882→      x-rate-limit: 30/min
+   883→      x-idempotent: true
+   884→      parameters:
+   885→        - name: id
+   886→          in: path
+   887→          required: true
+   888→          schema:
+   889→            type: string
+   890→            format: uuid
+   891→          description: Post ID
+   892→      requestBody:
+   893→        required: true
+   894→        content:
+   895→          application/json:
+   896→            schema:
+   897→              $ref: '#/components/schemas/UpdatePostRequest'
+   898→      responses:
+   899→        '200':
+   900→          description: Post updated
+   901→          content:
+   902→            application/json:
+   903→              schema:
+   904→                $ref: '#/components/schemas/UpdateResponse'
+   905→        '403':
+   906→          $ref: '#/components/responses/Forbidden'
+   907→        '404':
+   908→          $ref: '#/components/responses/NotFound'
+   909→    delete:
+   910→      tags: [Content]
+   911→      summary: Delete a post
+   912→      operationId: deletePost
+   913→      x-rate-limit: 30/min
+   914→      x-idempotent: true
+   915→      parameters:
+   916→        - name: id
+   917→          in: path
+   918→          required: true
+   919→          schema:
+   920→            type: string
+   921→            format: uuid
+   922→          description: Post ID
+   923→      responses:
+   924→        '200':
+   925→          description: Post deleted
+   926→          content:
+   927→            application/json:
+   928→              schema:
+   929→                $ref: '#/components/schemas/SuccessResponse'
+   930→        '403':
+   931→          $ref: '#/components/responses/Forbidden'
+   932→        '404':
+   933→          $ref: '#/components/responses/NotFound'
+   934→
+   935→  /posts/drafts:
+   936→    get:
+   937→      tags: [Content]
+   938→      summary: Get current user's drafts
+   939→      operationId: getDrafts
+   940→      x-rate-limit: 60/min
+   941→      parameters:
+   942→        - $ref: '#/components/parameters/LimitParam'
+   943→        - $ref: '#/components/parameters/CursorParam'
+   944→      responses:
+   945→        '200':
+   946→          description: Drafts retrieved
+   947→          content:
+   948→            application/json:
+   949→              schema:
+   950→                $ref: '#/components/schemas/DraftListResponse'
+   951→
+   952→  /posts/{id}/schedule:
+   953→    post:
+   954→      tags: [Content]
+   955→      summary: Schedule a post
+   956→      operationId: schedulePost
+   957→      x-rate-limit: 30/min
+   958→      x-idempotent: true
+   959→      parameters:
+   960→        - name: id
+   961→          in: path
+   962→          required: true
+   963→          schema:
+   964→            type: string
+   965→            format: uuid
+   966→          description: Post ID
+   967→      requestBody:
+   968→        required: true
+   969→        content:
+   970→          application/json:
+   971→            schema:
+   972→              $ref: '#/components/schemas/SchedulePostRequest'
+   973→            examples:
+   974→              valid:
+   975→                value:
+   976→                  publishAt: "2026-08-20T12:00:00Z"
+   977→      responses:
+   978→        '200':
+   979→          description: Post scheduled
+   980→          content:
+   981→            application/json:
+   982→              schema:
+   983→                $ref: '#/components/schemas/SchedulePostResponse'
+   984→              example:
+   985→                scheduled: true
+   986→
+   987→  /polls:
+   988→    post:
+   989→      tags: [Content]
+   990→      summary: Create a poll
+   991→      operationId: createPoll
+   992→      x-rate-limit: 30/min
+   993→      x-idempotent: true
+   994→      requestBody:
+   995→        required: true
+   996→        content:
+   997→          application/json:
+   998→            schema:
+   999→              $ref: '#/components/schemas/CreatePollRequest'
+  1000→            examples:
+  1001→              valid:
+  1002→                value:
+  1003→                  question: "What genre should I explore next?"
+  1004→                  options: ["Electronic", "Rock", "Hip Hop", "Jazz"]
+  1005→                  duration: 86400
+  1006→                  anonymous: false
+  1007→      responses:
+  1008→        '201':
+  1009→          description: Poll created
+  1010→          content:
+  1011→            application/json:
+  1012→              schema:
+  1013→                $ref: '#/components/schemas/CreatePollResponse'
+  1014→              example:
+  1015→                pollId: "550e8400-e29b-41d4-a716-446655440200"
+  1016→
+  1017→  /polls/{pollId}/votes/me:
+  1018→    put:
+  1019→      tags: [Content]
+  1020→      summary: Vote on a poll
+  1021→      operationId: votePoll
+  1022→      x-rate-limit: 30/min
+  1023→      x-idempotent: true
+  1024→      parameters:
+  1025→        - name: pollId
+  1026→          in: path
+  1027→          required: true
+  1028→          schema:
+  1029→            type: string
+  1030→            format: uuid
+  1031→          description: Poll ID
+  1032→      requestBody:
+  1033→        required: true
+  1034→        content:
+  1035→          application/json:
+  1036→            schema:
+  1037→              $ref: '#/components/schemas/VoteRequest'
+  1038→            examples:
+  1039→              valid:
+  1040→                value:
+  1041→                  optionIndex: 0
+  1042→      responses:
+  1043→        '200':
+  1044→          description: Vote recorded
+  1045→          content:
+  1046→            application/json:
+  1047→              schema:
+  1048→                $ref: '#/components/schemas/VoteResponse'
+  1049→              example:
+  1050→                success: true
+  1051→                counts: [45, 23, 12, 8]
+  1052→        '409':
+  1053→          $ref: '#/components/responses/Conflict'
+  1054→        '404':
+  1055→          $ref: '#/components/responses/NotFound'
+  1056→
+  1057→  /countdowns:
+  1058→    post:
+  1059→      tags: [Content]
+  1060→      summary: Create a countdown
+  1061→      operationId: createCountdown
+  1062→      x-rate-limit: 30/min
+  1063→      x-idempotent: true
+  1064→      requestBody:
+  1065→        required: true
+  1066→        content:
+  1067→          application/json:
+  1068→            schema:
+  1069→              $ref: '#/components/schemas/CreateCountdownRequest'
+  1070→            examples:
+  1071→              valid:
+  1072→                value:
+  1073→                  targetDate: "2026-12-25T00:00:00Z"
+  1074→                  timezone: "America/New_York"
+  1075→                  style: "modern"
+  1076→      responses:
+  1077→        '201':
+  1078→          description: Countdown created
+  1079→          content:
+  1080→            application/json:
+  1081→              schema:
+  1082→                $ref: '#/components/schemas/CreateCountdownResponse'
+  1083→              example:
+  1084→                countdownId: "550e8400-e29b-41d4-a716-446655440300"
+  1085→                embed: "<div class='countdown' data-id='...'></div>"
+  1086→
+  1087→  /posts/schedule:
+  1088→    post:
+  1089→      tags: [Content]
+  1090→      summary: Schedule a post with content
+  1091→      operationId: createScheduledPost
+  1092→      x-rate-limit: 30/min
+  1093→      x-idempotent: true
+  1094→      requestBody:
+  1095→        required: true
+  1096→        content:
+  1097→          application/json:
+  1098→            schema:
+  1099→              $ref: '#/components/schemas/CreateScheduledPostRequest'
+  1100→      responses:
+  1101→        '201':
+  1102→          description: Post scheduled
+  1103→          content:
+  1104→            application/json:
+  1105→              schema:
+  1106→                $ref: '#/components/schemas/CreateScheduledPostResponse'
+  1107→              example:
+  1108→                scheduledId: "550e8400-e29b-41d4-a716-446655440301"
+  1109→
+  1110→  /interactions/like:
+  1111→    post:
+  1112→      tags: [Content]
+  1113→      summary: Like content
+  1114→      operationId: likeContent
+  1115→      x-rate-limit: 100/min
+  1116→      x-idempotent: true
+  1117→      requestBody:
+  1118→        required: true
+  1119→        content:
+  1120→          application/json:
+  1121→            schema:
+  1122→              $ref: '#/components/schemas/ContentInteractionRequest'
+  1123→            examples:
+  1124→              valid:
+  1125→                value:
+  1126→                  contentId: "550e8400-e29b-41d4-a716-446655440100"
+  1127→      responses:
+  1128→        '200':
+  1129→          description: Content liked
+  1130→          content:
+  1131→            application/json:
+  1132→              schema:
+  1133→                $ref: '#/components/schemas/LikeResponse'
+  1134→              example:
+  1135→                liked: true
+  1136→                count: 235
+  1137→        '404':
+  1138→          $ref: '#/components/responses/NotFound'
+  1139→
+  1140→  /interactions/unlike:
+  1141→    delete:
+  1142→      tags: [Content]
+  1143→      summary: Unlike content
+  1144→      operationId: unlikeContent
+  1145→      x-rate-limit: 100/min
+  1146→      x-idempotent: true
+  1147→      requestBody:
+  1148→        required: true
+  1149→        content:
+  1150→          application/json:
+  1151→            schema:
+  1152→              $ref: '#/components/schemas/ContentInteractionRequest'
+  1153→      responses:
+  1154→        '200':
+  1155→          description: Content unliked
+  1156→          content:
+  1157→            application/json:
+  1158→              schema:
+  1159→                $ref: '#/components/schemas/UnlikeResponse'
+  1160→              example:
+  1161→                count: 234
+  1162→
+  1163→  /interactions/comment:
+  1164→    post:
+  1165→      tags: [Content]
+  1166→      summary: Comment on content
+  1167→      operationId: commentContent
+  1168→      x-rate-limit: 60/min
+  1169→      x-idempotent: true
+  1170→      requestBody:
+  1171→        required: true
+  1172→        content:
+  1173→          application/json:
+  1174→            schema:
+  1175→              $ref: '#/components/schemas/CreateCommentRequest'
+  1176→            examples:
+  1177→              valid:
+  1178→                value:
+  1179→                  contentId: "550e8400-e29b-41d4-a716-446655440100"
+  1180→                  text: "Great track! 🔥"
+  1181→                  mentions: ["550e8400-e29b-41d4-a716-446655440001"]
+  1182→      responses:
+  1183→        '201':
+  1184→          description: Comment created
+  1185→          content:
+  1186→            application/json:
+  1187→              schema:
+  1188→                $ref: '#/components/schemas/Comment'
+  1189→
+  1190→  /interactions/comments/{contentId}:
+  1191→    get:
+  1192→      tags: [Content]
+  1193→      summary: Get comments on content
+  1194→      operationId: getComments
+  1195→      security: []
+  1196→      x-rate-limit: 120/min
+  1197→      parameters:
+  1198→        - name: contentId
+  1199→          in: path
+  1200→          required: true
+  1201→          schema:
+  1202→            type: string
+  1203→            format: uuid
+  1204→          description: Content ID
+  1205→        - $ref: '#/components/parameters/LimitParam'
+  1206→        - $ref: '#/components/parameters/CursorParam'
+  1207→      responses:
+  1208→        '200':
+  1209→          description: Comments retrieved
+  1210→          content:
+  1211→            application/json:
+  1212→              schema:
+  1213→                $ref: '#/components/schemas/CommentListResponse'
+  1214→
+  1215→  /interactions/reaction:
+  1216→    post:
+  1217→      tags: [Content]
+  1218→      summary: React to content
+  1219→      operationId: reactContent
+  1220→      x-rate-limit: 60/min
+  1221→      x-idempotent: true
+  1222→      requestBody:
+  1223→        required: true
+  1224→        content:
+  1225→          application/json:
+  1226→            schema:
+  1227→              $ref: '#/components/schemas/ReactionRequest'
+  1228→            examples:
+  1229→              valid:
+  1230→                value:
+  1231→                  contentId: "550e8400-e29b-41d4-a716-446655440100"
+  1232→                  reaction: "❤️"
+  1233→      responses:
+  1234→        '200':
+  1235→          description: Reaction recorded
+  1236→          content:
+  1237→            application/json:
+  1238→              schema:
+  1239→                $ref: '#/components/schemas/ReactionResponse'
+  1240→              example:
+  1241→                count: 12
+  1242→
+  1243→  /interactions/repost:
+  1244→    post:
+  1245→      tags: [Content]
+  1246→      summary: Repost content
+  1247→      operationId: repostContent
+  1248→      x-rate-limit: 60/min
+  1249→      x-idempotent: true
+  1250→      requestBody:
+  1251→        required: true
+  1252→        content:
+  1253→          application/json:
+  1254→            schema:
+  1255→              $ref: '#/components/schemas/RepostRequest'
+  1256→            examples:
+  1257→              valid:
+  1258→                value:
+  1259→                  contentId: "550e8400-e29b-41d4-a716-446655440100"
+  1260→                  commentary: "This is amazing!"
+  1261→      responses:
+  1262→        '200':
+  1263→          description: Content reposted
+  1264→          content:
+  1265→            application/json:
+  1266→              schema:
+  1267→                $ref: '#/components/schemas/RepostResponse'
+  1268→              example:
+  1269→                reposted: true
+  1270→                count: 9
+  1271→
+  1272→  /interactions/unrepost:
+  1273→    delete:
+  1274→      tags: [Content]
+  1275→      summary: Remove repost
+  1276→      operationId: unrepostContent
+  1277→      x-rate-limit: 60/min
+  1278→      x-idempotent: true
+  1279→      requestBody:
+  1280→        required: true
+  1281→        content:
+  1282→          application/json:
+  1283→            schema:
+  1284→              $ref: '#/components/schemas/ContentInteractionRequest'
+  1285→      responses:
+  1286→        '200':
+  1287→          description: Repost removed
+  1288→          content:
+  1289→            application/json:
+  1290→              schema:
+  1291→                $ref: '#/components/schemas/UnrepostResponse'
+  1292→              example:
+  1293→                count: 8
+  1294→
+  1295→  /embed/{contentId}:
+  1296→    get:
+  1297→      tags: [Content]
+  1298→      summary: Get embed code for content
+  1299→      operationId: getEmbedCode
+  1300→      security: []
+  1301→      x-rate-limit: 60/min
+  1302→      parameters:
+  1303→        - name: contentId
+  1304→          in: path
+  1305→          required: true
+  1306→          schema:
+  1307→            type: string
+  1308→            format: uuid
+  1309→          description: Content ID
+  1310→      responses:
+  1311→        '200':
+  1312→          description: Embed code retrieved
+  1313→          content:
+  1314→            application/json:
+  1315→              schema:
+  1316→                $ref: '#/components/schemas/EmbedResponse'
+  1317→
+  1318→  # ====================================================================
+  1319→  # D4: RELATIONAL MECHANICS & MESSAGING
+  1320→  # ====================================================================
+  1321→
+  1322→  /conversations:
+  1323→    get:
+  1324→      tags: [Messaging]
+  1325→      summary: Get conversations
+  1326→      operationId: getConversations
+  1327→      x-rate-limit: 60/min
+  1328→      parameters:
+  1329→        - $ref: '#/components/parameters/LimitParam'
+  1330→        - $ref: '#/components/parameters/CursorParam'
+  1331→      responses:
+  1332→        '200':
+  1333→          description: Conversations retrieved
+  1334→          content:
+  1335→            application/json:
+  1336→              schema:
+  1337→                $ref: '#/components/schemas/ConversationListResponse'
+  1338→
+  1339→  /conversations/{id}/messages:
+  1340→    get:
+  1341→      tags: [Messaging]
+  1342→      summary: Get messages in conversation
+  1343→      operationId: getMessages
+  1344→      x-rate-limit: 120/min
+  1345→      parameters:
+  1346→        - name: id
+  1347→          in: path
+  1348→          required: true
+  1349→          schema:
+  1350→            type: string
+  1351→            format: uuid
+  1352→          description: Conversation ID
+  1353→        - name: limit
+  1354→          in: query
+  1355→          schema:
+  1356→            type: integer
+  1357→            minimum: 1
+  1358→            maximum: 100
+  1359→          default: 50
+  1360→        - $ref: '#/components/parameters/CursorParam'
+  1361→      responses:
+  1362→        '200':
+  1363→          description: Messages retrieved
+  1364→          content:
+  1365→            application/json:
+  1366→              schema:
+  1367→                $ref: '#/components/schemas/MessageListResponse'
+  1368→        '403':
+  1369→          $ref: '#/components/responses/Forbidden'
+  1370→        '404':
+  1371→          $ref: '#/components/responses/NotFound'
+  1372→
+  1373→  /messages:
+  1374→    post:
+  1375→      tags: [Messaging]
+  1376→      summary: Send a message
+  1377→      operationId: sendMessage
+  1378→      x-rate-limit: 60/min
+  1379→      x-idempotent: true
+  1380→      requestBody:
+  1381→        required: true
+  1382→        content:
+  1383→          application/json:
+  1384→            schema:
+  1385→              $ref: '#/components/schemas/SendMessageRequest'
+  1386→            examples:
+  1387→              valid:
+  1388→                value:
+  1389→                  conversationId: "550e8400-e29b-41d4-a716-446655440500"
+  1390→                  text: "Thanks for the support!"
+  1391→                  attachments:
+  1392→                    - type: "image"
+  1393→                      uploadId: "upl_123"
+  1394→      responses:
+  1395→        '201':
+  1396→          description: Message sent
+  1397→          content:
+  1398→            application/json:
+  1399→              schema:
+  1400→                $ref: '#/components/schemas/MessageResponse'
+  1401→        '403':
+  1402→          $ref: '#/components/responses/Forbidden'
+  1403→        '404':
+  1404→          $ref: '#/components/responses/NotFound'
+  1405→
+  1406→  /messages/{id}:
+  1407→    delete:
+  1408→      tags: [Messaging]
+  1409→      summary: Delete a message
+  1410→      operationId: deleteMessage
+  1411→      x-rate-limit: 30/min
+  1412→      x-idempotent: true
+  1413→      parameters:
+  1414→        - name: id
+  1415→          in: path
+  1416→          required: true
+  1417→          schema:
+  1418→            type: string
+  1419→            format: uuid
+  1420→          description: Message ID
+  1421→      responses:
+  1422→        '200':
+  1423→          description: Message deleted
+  1424→          content:
+  1425→            application/json:
+  1426→              schema:
+  1427→                $ref: '#/components/schemas/SuccessResponse'
+  1428→
+  1429→  /messages/broadcast:
+  1430→    post:
+  1431→      tags: [Messaging]
+  1432→      summary: Send a broadcast message
+  1433→      operationId: sendBroadcast
+  1434→      x-rate-limit: 5/day
+  1435→      x-idempotent: true
+  1436→      requestBody:
+  1437→        required: true
+  1438→        content:
+  1439→          application/json:
+  1440→            schema:
+  1441→              $ref: '#/components/schemas/BroadcastRequest'
+  1442→            examples:
+  1443→              valid:
+  1444→                value:
+  1445→                  segmentId: "seg_001"
+  1446→                  text: "🎵 New single out Friday! Pre-save link in bio."
+  1447→                  media:
+  1448→                    - type: "image"
+  1449→                      uploadId: "upl_789"
+  1450→      responses:
+  1451→        '200':
+  1452→          description: Broadcast sent
+  1453→          content:
+  1454→            application/json:
+  1455→              schema:
+  1456→                $ref: '#/components/schemas/BroadcastResponse'
+  1457→              example:
+  1458→                broadcastId: "bcast_001"
+  1459→                delivered: 542
+  1460→        '403':
+  1461→          $ref: '#/components/responses/Forbidden'
+  1462→        '429':
+  1463→          $ref: '#/components/responses/RateLimited'
+  1464→
+  1465→  /messages/auto-responder:
+  1466→    post:
+  1467→      tags: [Messaging]
+  1468→      summary: Create auto-responder
+  1469→      operationId: createAutoResponder
+  1470→      x-rate-limit: 10/min
+  1471→      x-idempotent: true
+  1472→      requestBody:
+  1473→        required: true
+  1474→        content:
+  1475→          application/json:
+  1476→            schema:
+  1477→              $ref: '#/components/schemas/AutoResponderRequest'
+  1478→      responses:
+  1479→        '200':
+  1480→          description: Auto-responder created
+  1481→          content:
+  1482→            application/json:
+  1483→              schema:
+  1484→                $ref: '#/components/schemas/AutoResponderResponse'
+  1485→              example:
+  1486→                configId: "ar_001"
+  1487→    get:
+  1488→      tags: [Messaging]
+  1489→      summary: Get auto-responder configuration
+  1490→      operationId: getAutoResponder
+  1491→      x-rate-limit: 30/min
+  1492→      responses:
+  1493→        '200':
+  1494→          description: Auto-responder retrieved
+  1495→          content:
+  1496→            application/json:
+  1497→              schema:
+  1498→                $ref: '#/components/schemas/AutoResponderConfig'
+  1499→    put:
+  1500→      tags: [Messaging]
+  1501→      summary: Update auto-responder
+  1502→      operationId: updateAutoResponder
+  1503→      x-rate-limit: 30/min
+  1504→      x-idempotent: true
+  1505→      requestBody:
+  1506→        required: true
+  1507→        content:
+  1508→          application/json:
+  1509→            schema:
+  1510→              $ref: '#/components/schemas/AutoResponderRequest'
+  1511→      responses:
+  1512→        '200':
+  1513→          description: Auto-responder updated
+  1514→          content:
+  1515→            application/json:
+  1516→              schema:
+  1517→                $ref: '#/components/schemas/UpdateResponse'
+  1518→
+  1519→  /notifications:
+  1520→    get:
+  1521→      tags: [Messaging, Notifications]
+  1522→      summary: Get notifications
+  1523→      operationId: getNotifications
+  1524→      x-rate-limit: 120/min
+  1525→      parameters:
+  1526→        - name: filter
+  1527→          in: query
+  1528→          schema:
+  1529→            type: string
+  1530→            enum: [all, content, engagement, event, commerce, system]
+  1531→          default: all
+  1532→          description: Notification type filter
+  1533→        - $ref: '#/components/parameters/LimitParam'
+  1534→        - $ref: '#/components/parameters/CursorParam'
+  1535→      responses:
+  1536→        '200':
+  1537→          description: Notifications retrieved
+  1538→          content:
+  1539→            application/json:
+  1540→              schema:
+  1541→                $ref: '#/components/schemas/NotificationListResponse'
+  1542→
+  1543→  /notifications/read:
+  1544→    post:
+  1545→      tags: [Messaging, Notifications]
+  1546→      summary: Mark notifications as read
+  1547→      operationId: markNotificationsRead
+  1548→      x-rate-limit: 60/min
+  1549→      x-idempotent: true
+  1550→      requestBody:
+  1551→        required: true
+  1552→        content:
+  1553→          application/json:
+  1554→            schema:
+  1555→              $ref: '#/components/schemas/ReadNotificationsRequest'
+  1556→            examples:
+  1557→              valid:
+  1558→                value:
+  1559→                  notificationIds: ["notif_001", "notif_002"]
+  1560→      responses:
+  1561→        '200':
+  1562→          description: Notifications marked read
+  1563→          content:
+  1564→            application/json:
+  1565→              schema:
+  1566→                $ref: '#/components/schemas/SuccessResponse'
+  1567→
+  1568→  /notifications/preferences:
+  1569→    get:
+  1570→      tags: [Messaging, Notifications]
+  1571→      summary: Get notification preferences
+  1572→      operationId: getNotificationPreferences
+  1573→      x-rate-limit: 30/min
+  1574→      responses:
+  1575→        '200':
+  1576→          description: Preferences retrieved
+  1577→          content:
+  1578→            application/json:
+  1579→              schema:
+  1580→                $ref: '#/components/schemas/NotificationPreferences'
+  1581→    put:
+  1582→      tags: [Messaging, Notifications]
+  1583→      summary: Update notification preferences
+  1584→      operationId: updateNotificationPreferences
+  1585→      x-rate-limit: 30/min
+  1586→      x-idempotent: true
+  1587→      requestBody:
+  1588→        required: true
+  1589→        content:
+  1590→          application/json:
+  1591→            schema:
+  1592→              $ref: '#/components/schemas/NotificationPreferences'
+  1593→      responses:
+  1594→        '200':
+  1595→          description: Preferences updated
+  1596→          content:
+  1597→            application/json:
+  1598→              schema:
+  1599→                $ref: '#/components/schemas/UpdateResponse'
+  1600→
+  1601→  /users/block:
+  1602→    post:
+  1603→      tags: [Messaging]
+  1604→      summary: Block a user
+  1605→      operationId: blockUser
+  1606→      x-rate-limit: 30/min
+  1607→      x-idempotent: true
+  1608→      requestBody:
+  1609→        required: true
+  1610→        content:
+  1611→          application/json:
+  1612→            schema:
+  1613→              $ref: '#/components/schemas/UserActionRequest'
+  1614→            examples:
+  1615→              valid:
+  1616→                value:
+  1617→                  userId: "550e8400-e29b-41d4-a716-446655440001"
+  1618→      responses:
+  1619→        '200':
+  1620→          description: User blocked
+  1621→          content:
+  1622→            application/json:
+  1623→              schema:
+  1624→                $ref: '#/components/schemas/SuccessResponse'
+  1625→    delete:
+  1626→      tags: [Messaging]
+  1627→      summary: Unblock a user
+  1628→      operationId: unblockUser
+  1629→      x-rate-limit: 30/min
+  1630→      x-idempotent: true
+  1631→      requestBody:
+  1632→        required: true
+  1633→        content:
+  1634→          application/json:
+  1635→            schema:
+  1636→              $ref: '#/components/schemas/UserActionRequest'
+  1637→      responses:
+  1638→        '200':
+  1639→          description: User unblocked
+  1640→          content:
+  1641→            application/json:
+  1642→              schema:
+  1643→                $ref: '#/components/schemas/SuccessResponse'
+  1644→
+  1645→  /users/blocked:
+  1646→    get:
+  1647→      tags: [Messaging]
+  1648→      summary: Get blocked users
+  1649→      operationId: getBlockedUsers
+  1650→      x-rate-limit: 30/min
+  1651→      parameters:
+  1652→        - $ref: '#/components/parameters/LimitParam'
+  1653→        - $ref: '#/components/parameters/CursorParam'
+  1654→      responses:
+  1655→        '200':
+  1656→          description: Blocked users retrieved
+  1657→          content:
+  1658→            application/json:
+  1659→              schema:
+  1660→                $ref: '#/components/schemas/UserSummaryListResponse'
+  1661→
+  1662→  /users/mute:
+  1663→    post:
+  1664→      tags: [Messaging]
+  1665→      summary: Mute a user
+  1666→      operationId: muteUser
+  1667→      x-rate-limit: 30/min
+  1668→      x-idempotent: true
+  1669→      requestBody:
+  1670→        required: true
+  1671→        content:
+  1672→          application/json:
+  1673→            schema:
+  1674→              $ref: '#/components/schemas/UserActionRequest'
+  1675→      responses:
+  1676→        '200':
+  1677→          description: User muted
+  1678→          content:
+  1679→            application/json:
+  1680→              schema:
+  1681→                $ref: '#/components/schemas/SuccessResponse'
+  1682→
+  1683→  # ====================================================================
+  1684→  # D5: LIVE BROADCASTING & STREAMING
+  1685→  # ====================================================================
+  1686→
+  1687→  /live-streams:
+  1688→    get:
+  1689→      tags: [Live]
+  1690→      summary: List live streams
+  1691→      operationId: listLiveStreams
+  1692→      security: []
+  1693→      x-rate-limit: 60/min
+  1694→      parameters:
+  1695→        - name: status
+  1696→          in: query
+  1697→          schema:
+  1698→            type: string
+  1699→            enum: [active, scheduled, ended]
+  1700→          default: active
+  1701→          description: Stream status filter
+  1702→        - $ref: '#/components/parameters/LimitParam'
+  1703→        - $ref: '#/components/parameters/CursorParam'
+  1704→      responses:
+  1705→        '200':
+  1706→          description: Streams retrieved
+  1707→          content:
+  1708→            application/json:
+  1709→              schema:
+  1710→                $ref: '#/components/schemas/LiveStreamListResponse'
+  1711→    post:
+  1712→      tags: [Live]
+  1713→      summary: Create a live stream
+  1714→      operationId: createLiveStream
+  1715→      x-rate-limit: 10/hour
+  1716→      x-idempotent: true
+  1717→      requestBody:
+  1718→        required: true
+  1719→        content:
+  1720→          application/json:
+  1721→            schema:
+  1722→              $ref: '#/components/schemas/CreateLiveStreamRequest'
+  1723→            examples:
+  1724→              valid:
+  1725→                value:
+  1726→                  title: "My Live Performance"
+  1727→                  description: "Join me for a live set!"
+  1728→                  type: "standard"
+  1729→                  monetization:
+  1730→                    ticketRequired: true
+  1731→                    ticketPrice: 9.99
+  1732→                    tippingEnabled: true
+  1733→                    merchEnabled: true
+  1734→      responses:
+  1735→        '201':
+  1736→          description: Stream created
+  1737→          content:
+  1738→            application/json:
+  1739→              schema:
+  1740→                $ref: '#/components/schemas/CreateLiveStreamResponse'
+  1741→              example:
+  1742→                streamId: "550e8400-e29b-41d4-a716-446655440600"
+  1743→                streamKey: "live_abc123def456"
+  1744→                ingestUrl: "rtmp://ingest.musicosy.com/live"
+  1745→        '403':
+  1746→          $ref: '#/components/responses/Forbidden'
+  1747→
+  1748→  /live-streams/{id}:
+  1749→    get:
+  1750→      tags: [Live]
+  1751→      summary: Get a live stream
+  1752→      operationId: getLiveStream
+  1753→      security: []
+  1754→      x-rate-limit: 60/min
+  1755→      parameters:
+  1756→        - $ref: '#/components/parameters/StreamIdParam'
+  1757→      responses:
+  1758→        '200':
+  1759→          description: Stream retrieved
+  1760→          content:
+  1761→            application/json:
+  1762→              schema:
+  1763→                $ref: '#/components/schemas/LiveStream'
+  1764→        '403':
+  1765→          $ref: '#/components/responses/Forbidden'
+  1766→        '404':
+  1767→          $ref: '#/components/responses/NotFound'
+  1768→
+  1769→  /live-streams/{id}/end:
+  1770→    post:
+  1771→      tags: [Live]
+  1772→      summary: End a live stream
+  1773→      operationId: endLiveStream
+  1774→      x-rate-limit: 10/min
+  1775→      x-idempotent: true
+  1776→      parameters:
+  1777→        - $ref: '#/components/parameters/StreamIdParam'
+  1778→      responses:
+  1779→        '200':
+  1780→          description: Stream ended
+  1781→          content:
+  1782→            application/json:
+  1783→              schema:
+  1784→                $ref: '#/components/schemas/SuccessResponse'
+  1785→
+  1786→  /live-streams/{id}/chat:
+  1787→    get:
+  1788→      tags: [Live]
+  1789→      summary: Get chat messages
+  1790→      operationId: getLiveChat
+  1791→      x-rate-limit: 120/min
+  1792→      parameters:
+  1793→        - $ref: '#/components/parameters/StreamIdParam'
+  1794→        - name: limit
+  1795→          in: query
+  1796→          schema:
+  1797→            type: integer
+  1798→            minimum: 1
+  1799→            maximum: 100
+  1800→          default: 50
+  1801→        - $ref: '#/components/parameters/CursorParam'
+  1802→      responses:
+  1803→        '200':
+  1804→          description: Chat messages retrieved
+  1805→          content:
+  1806→            application/json:
+  1807→              schema:
+  1808→                $ref: '#/components/schemas/ChatMessageListResponse'
+  1809→    post:
+  1810→      tags: [Live]
+  1811→      summary: Send a chat message
+  1812→      operationId: sendChatMessage
+  1813→      x-rate-limit: 30/min
+  1814→      x-idempotent: true
+  1815→      parameters:
+  1816→        - $ref: '#/components/parameters/StreamIdParam'
+  1817→      requestBody:
+  1818→        required: true
+  1819→        content:
+  1820→          application/json:
+  1821→            schema:
+  1822→              $ref: '#/components/schemas/SendChatMessageRequest'
+  1823→            examples:
+  1824→              valid:
+  1825→                value:
+  1826→                  text: "Amazing performance!"
+  1827→                  reaction: "🔥"
+  1828→      responses:
+  1829→        '201':
+  1830→          description: Message sent
+  1831→          content:
+  1832→            application/json:
+  1833→              schema:
+  1834→                $ref: '#/components/schemas/ChatMessageResponse'
+  1835→
+  1836→  /live-streams/{id}/tips:
+  1837→    post:
+  1838→      tags: [Live]
+  1839→      summary: Send a tip
+  1840→      operationId: sendTip
+  1841→      x-rate-limit: 10/min
+  1842→      x-idempotent: true
+  1843→      parameters:
+  1844→        - $ref: '#/components/parameters/StreamIdParam'
+  1845→      requestBody:
+  1846→        required: true
+  1847→        content:
+  1848→          application/json:
+  1849→            schema:
+  1850→              $ref: '#/components/schemas/TipRequest'
+  1851→            examples:
+  1852→              valid:
+  1853→                value:
+  1854→                  amount: 5.00
+  1855→                  message: "Love your music!"
+  1856→      responses:
+  1857→        '200':
+  1858→          description: Tip sent
+  1859→          content:
+  1860→            application/json:
+  1861→              schema:
+  1862→                $ref: '#/components/schemas/TipResponse'
+  1863→              example:
+  1864→                transactionId: "txn_001"
+  1865→        '402':
+  1866→          $ref: '#/components/responses/PaymentRequired'
+  1867→
+  1868→  /live-streams/{id}/ticket-checkouts:
+  1869→    post:
+  1870→      tags: [Live]
+  1871→      summary: Create ticket checkout session
+  1872→      operationId: createTicketCheckout
+  1873→      x-rate-limit: 10/min
+  1874→      x-idempotent: true
+  1875→      parameters:
+  1876→        - $ref: '#/components/parameters/StreamIdParam'
+  1877→      requestBody:
+  1878→        required: true
+  1879→        content:
+  1880→          application/json:
+  1881→            schema:
+  1882→              $ref: '#/components/schemas/TicketCheckoutRequest'
+  1883→      responses:
+  1884→        '200':
+  1885→          description: Checkout session created
+  1886→          content:
+  1887→            application/json:
+  1888→              schema:
+  1889→                $ref: '#/components/schemas/TicketCheckoutResponse'
+  1890→              example:
+  1891→                checkoutId: "chk_001"
+  1892→                status: "pending"
+  1893→                clientSecret: "pi_123_secret_456"
+  1894→
+  1895→  /live-streams/{id}/monetization:
+  1896→    put:
+  1897→      tags: [Live]
+  1898→      summary: Update stream monetization
+  1899→      operationId: updateStreamMonetization
+  1900→      x-rate-limit: 10/min
+  1901→      x-idempotent: true
+  1902→      parameters:
+  1903→        - $ref: '#/components/parameters/StreamIdParam'
+  1904→      requestBody:
+  1905→        required: true
+  1906→        content:
+  1907→          application/json:
+  1908→            schema:
+  1909→              $ref: '#/components/schemas/StreamMonetizationRequest'
+  1910→      responses:
+  1911→        '200':
+  1912→          description: Monetization updated
+  1913→          content:
+  1914→            application/json:
+  1915→              schema:
+  1916→                $ref: '#/components/schemas/UpdateResponse'
+  1917→
+  1918→  /meet-greet/sessions:
+  1919→    post:
+  1920→      tags: [Live]
+  1921→      summary: Create meet & greet session
+  1922→      operationId: createMeetGreet
+  1923→      x-rate-limit: 10/min
+  1924→      x-idempotent: true
+  1925→      requestBody:
+  1926→        required: true
+  1927→        content:
+  1928→          application/json:
+  1929→            schema:
+  1930→              $ref: '#/components/schemas/CreateMeetGreetRequest'
+  1931→      responses:
+  1932→        '201':
+  1933→          description: Session created
+  1934→          content:
+  1935→            application/json:
+  1936→              schema:
+  1937→                $ref: '#/components/schemas/CreateMeetGreetResponse'
+  1938→              example:
+  1939→                sessionId: "mg_001"
+  1940→
+  1941→  /meet-greet/sessions/{id}:
+  1942→    get:
+  1943→      tags: [Live]
+  1944→      summary: Get meet & greet session
+  1945→      operationId: getMeetGreet
+  1946→      x-rate-limit: 30/min
+  1947→      parameters:
+  1948→        - name: id
+  1949→          in: path
+  1950→          required: true
+  1951→          schema:
+  1952→            type: string
+  1953→            format: uuid
+  1954→          description: Session ID
+  1955→      responses:
+  1956→        '200':
+  1957→          description: Session retrieved
+  1958→          content:
+  1959→            application/json:
+  1960→              schema:
+  1961→                $ref: '#/components/schemas/MeetGreetSession'
+  1962→
+  1963→  /checkout/ticket:
+  1964→    post:
+  1965→      tags: [Live, Tour]
+  1966→      summary: Purchase event ticket
+  1967→      operationId: purchaseTicket
+  1968→      x-rate-limit: 30/min
+  1969→      x-idempotent: true
+  1970→      requestBody:
+  1971→        required: true
+  1972→        content:
+  1973→          application/json:
+  1974→            schema:
+  1975→              $ref: '#/components/schemas/PurchaseTicketRequest'
+  1976→      responses:
+  1977→        '201':
+  1978→          description: Ticket purchased
+  1979→          content:
+  1980→            application/json:
+  1981→              schema:
+  1982→                $ref: '#/components/schemas/PurchaseTicketResponse'
+  1983→
+  1984→  # ====================================================================
+  1985→  # D6: GOVERNANCE & ENFORCEMENT
+  1986→  # ====================================================================
+  1987→
+  1988→  /governance/visibility/{assetId}:
+  1989→    get:
+  1990→      tags: [Governance]
+  1991→      summary: Get visibility settings
+  1992→      operationId: getVisibilitySettings
+  1993→      x-rate-limit: 60/min
+  1994→      parameters:
+  1995→        - $ref: '#/components/parameters/AssetIdParam'
+  1996→      responses:
+  1997→        '200':
+  1998→          description: Settings retrieved
+  1999→          content:
+  2000→            application/json:
+
+[showing lines 1-2000 of 17835; use offset=2001 with limit to continue reading]

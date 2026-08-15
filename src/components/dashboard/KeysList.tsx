@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Copy, Check, KeyRound, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Copy, Check, KeyRound, Plus, RotateCcw, Trash2, Code2 } from "lucide-react";
+import { CodeSnippet } from "@/components/dashboard/CodeSnippet";
 
 type ApiKeyRow = {
   id: string;
@@ -384,6 +385,7 @@ function RevealModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const full = created.rawSecret;
 
   async function copy() {
@@ -423,6 +425,25 @@ function RevealModal({
           security, the full key is never shown again. If you lose it,
           you&apos;ll need to roll the key to generate a new one.
         </p>
+
+        {/* Code snippet — shows ready-to-paste examples with this key */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowCode((v) => !v)}
+            className="flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Code2 className="size-3.5" />
+            {showCode ? "Hide code example" : "Show code example"}
+          </button>
+          {showCode && (
+            <CodeSnippet
+              secret={full}
+              title="Verifies your key works and returns gateway metadata."
+            />
+          )}
+        </div>
+
         <div className="flex justify-end border-t border-border pt-4">
           <button
             onClick={onClose}
