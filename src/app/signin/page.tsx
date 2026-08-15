@@ -6,13 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 /**
- * Musicosy sign-in.
+ * Musicosy sign-in / sign-up.
  *
- * Behavior (per spec):
- *  - User enters email → password → submits
- *  - If the email exists in Supabase, sign in with the password
- *  - If the email does NOT exist, sign up automatically and continue
- *  - On success, redirect to `next` (defaults to /dashboard)
+ * Behavior (per spec): the form queries Supabase to check if the email
+ * exists BEFORE showing the password field. If the email is registered,
+ * the password form runs sign-in. If it isn't, the password form runs
+ * sign-up. The user never has to enter wrong credentials to discover
+ * which flow they're in.
  *
  * Phone / Google / Apple buttons match the reference design from
  * landing-home. They will show Supabase's native error if a provider
@@ -33,7 +33,9 @@ export default function SignInPage() {
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [showPhone, setShowPhone] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  // flow is set after the email "Continue" click — drives button label + behavior
+  const [flow, setFlow] = useState<"signin" | "signup" | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +44,72 @@ export default function SignInPage() {
       router.refresh();
       router.replace(next);
     });
+  }
+
+  // --- Check email → set flow ---
+  async function checkEmailAndContinue() {
+    setError(null);
+    setCheckingEmail(true);
+    try {
+      const res = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Could not verify email. Try again.");
+        return;
+      }
+      const { exists } = await res.json();
+      setFlow(exists ? "signin" : "signup");
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setCheckingEmail(false);
+    }
+  }
+
+  // --- Submit password (sign-in or sign-up based on flow) ---
+  async function submitPassword() {
+    setError(null);
+
+    if (flow === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      finish();
+      return;
+    }
+
+    // flow === "signup"
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    // If email confirmation is off, signUp returns a session — done
+    if (data.session) {
+      finish();
+      return;
+    }
+    // Email confirmation is on — Supabase requires verification before login
+    setError(
+      `Account created. Check your inbox at ${email.trim()} for a confirmation link, ` +
+      `then sign in. (To disable this requirement in dev: Supabase Dashboard → ` +
+      `Authentication → Sign In / Up → turn off "Confirm email".)`,
+    );
   }
 
   // --- Phone OTP ---
@@ -82,55 +150,6 @@ export default function SignInPage() {
       },
     });
     if (error) setError(error.message);
-  }
-
-  // --- Email + password (sign-in, with auto sign-up fallback) ---
-  async function signInWithEmail() {
-    setError(null);
-
-    // 1) Try sign-in
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (!error) {
-      finish();
-      return;
-    }
-
-    // 2) If credentials are invalid, the account may not exist yet — sign up
-    if (
-      error.message.toLowerCase().includes("invalid login credentials") ||
-      error.code === "invalid_credentials"
-    ) {
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-        },
-      });
-      if (signUpError) {
-        setError(signUpError.message);
-        return;
-      }
-      // 3) If email confirmation is off, signUp returns a session — done
-      if (signUpData.session) {
-        finish();
-        return;
-      }
-      // 4) Email confirmation is on — Supabase requires verification before login
-      setError(
-        `Account created. Check your inbox at ${email.trim()} for a confirmation link, ` +
-        `then sign in. (To disable this requirement in dev: Supabase Dashboard → ` +
-        `Authentication → Sign In / Up → turn off "Confirm email".)`,
-      );
-      return;
-    }
-
-    // Other sign-in error (rate limit, etc.)
-    setError(error.message);
   }
 
   return (
@@ -247,28 +266,30 @@ export default function SignInPage() {
               id="identifier"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                // Reset flow when email changes — need to re-check before submit
+                if (flow) setFlow(null);
+              }}
               placeholder="Email or username"
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
               type="button"
-              disabled={!email.trim() || pending}
-              onClick={() => {
-                if (email.trim()) setShowPassword(true);
-              }}
+              disabled={!email.trim() || checkingEmail || pending}
+              onClick={checkEmailAndContinue}
               className="mt-4 h-14 w-full rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 disabled:bg-border disabled:text-muted-foreground"
             >
-              Continue
+              {checkingEmail ? "Checking…" : "Continue"}
             </button>
           </div>
 
-          {/* Password — slow reveal after email Continue */}
+          {/* Password — slow reveal after email check resolves the flow */}
           <div
             className={`grid transition-all duration-500 ease-in-out ${
-              showPassword ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
+              flow ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
             }`}
-            style={{ overflow: showPassword ? "visible" : "hidden" }}
+            style={{ overflow: flow ? "visible" : "hidden" }}
           >
             <label htmlFor="password" className="sr-only">
               Password
@@ -278,18 +299,18 @@ export default function SignInPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
+              placeholder={flow === "signup" ? "Create a password" : "Password"}
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
               type="button"
               disabled={!password.trim() || pending}
-              onClick={signInWithEmail}
+              onClick={submitPassword}
               className={`mt-3 flex h-14 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
                 !password.trim() ? "pointer-events-none opacity-40" : ""
               }`}
             >
-              Sign in
+              {flow === "signup" ? "Create account" : "Sign in"}
             </button>
           </div>
 
