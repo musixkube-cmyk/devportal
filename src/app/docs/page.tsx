@@ -43,16 +43,8 @@ export default function DocsHome() {
     <div className="w-full">
       <p className="label-mono">Musicosy API · v1.0.0</p>
       <h1 className="mt-2 text-4xl font-semibold lg:text-5xl">
-        Musicosy API Documentation
+        API Documentation
       </h1>
-      <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground">
-        Programmatic access to the Musicosy platform — identity, content,
-        commerce, distribution, analytics, and more. Base URL{" "}
-        <code className="font-mono text-sm">
-          https://api.musicosy.com/v1
-        </code>
-        .
-      </p>
 
       <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
