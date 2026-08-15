@@ -1,0 +1,952 @@
+[
+  {
+    "source": "/docs/api-reference/d1",
+    "destination": "/docs/api-reference/identity-and-social-graph",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d1/users",
+    "destination": "/docs/api-reference/identity-and-social-graph/users",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d1/profiles",
+    "destination": "/docs/api-reference/identity-and-social-graph/profiles",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d1/follows",
+    "destination": "/docs/api-reference/identity-and-social-graph/follows",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d2",
+    "destination": "/docs/api-reference/feed-and-discovery",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d2/feed",
+    "destination": "/docs/api-reference/feed-and-discovery/feed",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d2/recommendations",
+    "destination": "/docs/api-reference/feed-and-discovery/recommendations",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d2/trending",
+    "destination": "/docs/api-reference/feed-and-discovery/trending",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d3",
+    "destination": "/docs/api-reference/content-and-media-publishing",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d3/posts",
+    "destination": "/docs/api-reference/content-and-media-publishing/posts",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d3/polls",
+    "destination": "/docs/api-reference/content-and-media-publishing/polls",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d3/countdowns",
+    "destination": "/docs/api-reference/content-and-media-publishing/countdowns",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d3/interactions",
+    "destination": "/docs/api-reference/content-and-media-publishing/interactions",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4/conversations",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging/conversations",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4/messages",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging/messages",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4/broadcasts",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging/broadcasts",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4/auto-responders",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging/auto-responders",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4/notifications",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging/notifications",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d4/blocking",
+    "destination": "/docs/api-reference/relational-mechanics-and-messaging/blocking",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/live-streams",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/live-streams",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/live-chat",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/live-chat",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/tipping",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/tipping",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/ticket-checkout",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/ticket-checkout",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/monetization",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/monetization",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/meet-greet",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/meet-greet",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d5/event-ticketing",
+    "destination": "/docs/api-reference/live-broadcasting-and-streaming/event-ticketing",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6",
+    "destination": "/docs/api-reference/governance-and-enforcement",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/visibility",
+    "destination": "/docs/api-reference/governance-and-enforcement/visibility",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/delivery-rules",
+    "destination": "/docs/api-reference/governance-and-enforcement/delivery-rules",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/downloads",
+    "destination": "/docs/api-reference/governance-and-enforcement/downloads",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/regional-settings",
+    "destination": "/docs/api-reference/governance-and-enforcement/regional-settings",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/moderation",
+    "destination": "/docs/api-reference/governance-and-enforcement/moderation",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/comment-moderation",
+    "destination": "/docs/api-reference/governance-and-enforcement/comment-moderation",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/content-transitions",
+    "destination": "/docs/api-reference/governance-and-enforcement/content-transitions",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d6/deletion-requests",
+    "destination": "/docs/api-reference/governance-and-enforcement/deletion-requests",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/products",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/products",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/storefront",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/storefront",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/orders",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/orders",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/checkout",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/checkout",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/tipping",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/tipping",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/subscriptions",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/subscriptions",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d7/playlists",
+    "destination": "/docs/api-reference/wallet-and-consumer-commerce/playlists",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8",
+    "destination": "/docs/api-reference/catalog-and-distribution",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8/releases",
+    "destination": "/docs/api-reference/catalog-and-distribution/releases",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8/assets",
+    "destination": "/docs/api-reference/catalog-and-distribution/assets",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8/metadata",
+    "destination": "/docs/api-reference/catalog-and-distribution/metadata",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8/identifiers",
+    "destination": "/docs/api-reference/catalog-and-distribution/identifiers",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8/distribution",
+    "destination": "/docs/api-reference/catalog-and-distribution/distribution",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d8/lyrics",
+    "destination": "/docs/api-reference/catalog-and-distribution/lyrics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9",
+    "destination": "/docs/api-reference/royalties-splits-and-finance",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/royalty-statements",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/royalty-statements",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/splits",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/splits",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/payouts",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/payouts",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/disbursements",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/disbursements",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/tax-forms",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/tax-forms",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/compliance",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/compliance",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/capital",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/capital",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/recipient-statements",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/recipient-statements",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d9/reconciliation",
+    "destination": "/docs/api-reference/royalties-splits-and-finance/reconciliation",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10",
+    "destination": "/docs/api-reference/roster-team-and-org",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10/team",
+    "destination": "/docs/api-reference/roster-team-and-org/team",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10/iam",
+    "destination": "/docs/api-reference/roster-team-and-org/iam",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10/audit-log",
+    "destination": "/docs/api-reference/roster-team-and-org/audit-log",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10/contracts",
+    "destination": "/docs/api-reference/roster-team-and-org/contracts",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10/ar-talent-pipeline",
+    "destination": "/docs/api-reference/roster-team-and-org/ar-talent-pipeline",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d10/workflows",
+    "destination": "/docs/api-reference/roster-team-and-org/workflows",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11",
+    "destination": "/docs/api-reference/live-events-and-tour-ops",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11/tours",
+    "destination": "/docs/api-reference/live-events-and-tour-ops/tours",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11/ticketing",
+    "destination": "/docs/api-reference/live-events-and-tour-ops/ticketing",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11/venue-portal",
+    "destination": "/docs/api-reference/live-events-and-tour-ops/venue-portal",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11/virtual-events",
+    "destination": "/docs/api-reference/live-events-and-tour-ops/virtual-events",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11/in-person-events",
+    "destination": "/docs/api-reference/live-events-and-tour-ops/in-person-events",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d11/ticket-checkout",
+    "destination": "/docs/api-reference/live-events-and-tour-ops/ticket-checkout",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d12",
+    "destination": "/docs/api-reference/editorial-and-marketing-cms",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d12/epk",
+    "destination": "/docs/api-reference/editorial-and-marketing-cms/epk",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d12/website",
+    "destination": "/docs/api-reference/editorial-and-marketing-cms/website",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d12/brand",
+    "destination": "/docs/api-reference/editorial-and-marketing-cms/brand",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d12/bio",
+    "destination": "/docs/api-reference/editorial-and-marketing-cms/bio",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d12/landing-pages",
+    "destination": "/docs/api-reference/editorial-and-marketing-cms/landing-pages",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d13",
+    "destination": "/docs/api-reference/social-distribution-and-syndication",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d13/social-publishing",
+    "destination": "/docs/api-reference/social-distribution-and-syndication/social-publishing",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d13/smart-links",
+    "destination": "/docs/api-reference/social-distribution-and-syndication/smart-links",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d13/pre-save",
+    "destination": "/docs/api-reference/social-distribution-and-syndication/pre-save",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d13/dsp-profiles",
+    "destination": "/docs/api-reference/social-distribution-and-syndication/dsp-profiles",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d14",
+    "destination": "/docs/api-reference/search-and-indexing-infra",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d14/search",
+    "destination": "/docs/api-reference/search-and-indexing-infra/search",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d14/index-management",
+    "destination": "/docs/api-reference/search-and-indexing-infra/index-management",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15",
+    "destination": "/docs/api-reference/analytics-and-telemetry",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/streaming-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/streaming-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/fan-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/fan-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/revenue-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/revenue-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/engagement-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/engagement-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/bi-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/bi-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/retention-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/retention-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/reports",
+    "destination": "/docs/api-reference/analytics-and-telemetry/reports",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/podcast-analytics",
+    "destination": "/docs/api-reference/analytics-and-telemetry/podcast-analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d15/export",
+    "destination": "/docs/api-reference/analytics-and-telemetry/export",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/mixing",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/mixing",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/mastering",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/mastering",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/stem-separation",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/stem-separation",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/restoration",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/restoration",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/effects",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/effects",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/ai-composition",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/ai-composition",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/beat-matching",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/beat-matching",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/samples",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/samples",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/canvas",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/canvas",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/promo-video",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/promo-video",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d16/enterprise-ai",
+    "destination": "/docs/api-reference/ai-and-audio-intelligence/enterprise-ai",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d17",
+    "destination": "/docs/api-reference/media-processing-and-streaming",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d17/uploads",
+    "destination": "/docs/api-reference/media-processing-and-streaming/uploads",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d17/streaming",
+    "destination": "/docs/api-reference/media-processing-and-streaming/streaming",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d17/transcoding",
+    "destination": "/docs/api-reference/media-processing-and-streaming/transcoding",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d17/media-validation",
+    "destination": "/docs/api-reference/media-processing-and-streaming/media-validation",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18",
+    "destination": "/docs/api-reference/payments-and-payouts-infra",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18/payment-methods",
+    "destination": "/docs/api-reference/payments-and-payouts-infra/payment-methods",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18/charges",
+    "destination": "/docs/api-reference/payments-and-payouts-infra/charges",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18/refunds",
+    "destination": "/docs/api-reference/payments-and-payouts-infra/refunds",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18/webhooks",
+    "destination": "/docs/api-reference/payments-and-payouts-infra/webhooks",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18/balance",
+    "destination": "/docs/api-reference/payments-and-payouts-infra/balance",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d18/withdrawals",
+    "destination": "/docs/api-reference/payments-and-payouts-infra/withdrawals",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d19",
+    "destination": "/docs/api-reference/notifications",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d19/notifications",
+    "destination": "/docs/api-reference/notifications/notifications",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d19/push-tokens",
+    "destination": "/docs/api-reference/notifications/push-tokens",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d20",
+    "destination": "/docs/api-reference/entitlements-and-feature-flags",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d20/user-entitlements",
+    "destination": "/docs/api-reference/entitlements-and-feature-flags/user-entitlements",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d20/tiers",
+    "destination": "/docs/api-reference/entitlements-and-feature-flags/tiers",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d20/feature-flags",
+    "destination": "/docs/api-reference/entitlements-and-feature-flags/feature-flags",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d20/experiments",
+    "destination": "/docs/api-reference/entitlements-and-feature-flags/experiments",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21/api-keys",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks/api-keys",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21/webhooks",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks/webhooks",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21/usage",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks/usage",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21/sandbox",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks/sandbox",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21/sdks",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks/sdks",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d21/connectors",
+    "destination": "/docs/api-reference/developer-platform-and-webhooks/connectors",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22",
+    "destination": "/docs/api-reference/advertising-integration",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/campaigns",
+    "destination": "/docs/api-reference/advertising-integration/campaigns",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/ad-groups",
+    "destination": "/docs/api-reference/advertising-integration/ad-groups",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/audiences",
+    "destination": "/docs/api-reference/advertising-integration/audiences",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/creatives",
+    "destination": "/docs/api-reference/advertising-integration/creatives",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/analytics",
+    "destination": "/docs/api-reference/advertising-integration/analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/leads",
+    "destination": "/docs/api-reference/advertising-integration/leads",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/catalog",
+    "destination": "/docs/api-reference/advertising-integration/catalog",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/programmatic-exchange",
+    "destination": "/docs/api-reference/advertising-integration/programmatic-exchange",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/account",
+    "destination": "/docs/api-reference/advertising-integration/account",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/billing",
+    "destination": "/docs/api-reference/advertising-integration/billing",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d22/transactions",
+    "destination": "/docs/api-reference/advertising-integration/transactions",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23",
+    "destination": "/docs/api-reference/trust-and-safety-ops",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23/reports",
+    "destination": "/docs/api-reference/trust-and-safety-ops/reports",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23/appeals",
+    "destination": "/docs/api-reference/trust-and-safety-ops/appeals",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23/safety-actions",
+    "destination": "/docs/api-reference/trust-and-safety-ops/safety-actions",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23/fraud-alerts",
+    "destination": "/docs/api-reference/trust-and-safety-ops/fraud-alerts",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23/trust-metrics",
+    "destination": "/docs/api-reference/trust-and-safety-ops/trust-metrics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d23/investigations",
+    "destination": "/docs/api-reference/trust-and-safety-ops/investigations",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24",
+    "destination": "/docs/api-reference/support-and-admin-operations",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24/tickets",
+    "destination": "/docs/api-reference/support-and-admin-operations/tickets",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24/disputes",
+    "destination": "/docs/api-reference/support-and-admin-operations/disputes",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24/escalations",
+    "destination": "/docs/api-reference/support-and-admin-operations/escalations",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24/analytics",
+    "destination": "/docs/api-reference/support-and-admin-operations/analytics",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24/admin-actions",
+    "destination": "/docs/api-reference/support-and-admin-operations/admin-actions",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d24/overrides",
+    "destination": "/docs/api-reference/support-and-admin-operations/overrides",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d25",
+    "destination": "/docs/api-reference/legal-policy-and-compliance",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d25/legal-contracts",
+    "destination": "/docs/api-reference/legal-policy-and-compliance/legal-contracts",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d25/compliance",
+    "destination": "/docs/api-reference/legal-policy-and-compliance/compliance",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d25/policies",
+    "destination": "/docs/api-reference/legal-policy-and-compliance/policies",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26",
+    "destination": "/docs/api-reference/platform-infra-and-reliability",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/service-status",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/service-status",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/incidents",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/incidents",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/maintenance",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/maintenance",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/backups",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/backups",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/scaling",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/scaling",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/rate-limits",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/rate-limits",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d26/health",
+    "destination": "/docs/api-reference/platform-infra-and-reliability/health",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27",
+    "destination": "/docs/api-reference/podcast-network",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/shows",
+    "destination": "/docs/api-reference/podcast-network/shows",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/episodes",
+    "destination": "/docs/api-reference/podcast-network/episodes",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/rss",
+    "destination": "/docs/api-reference/podcast-network/rss",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/private-feeds",
+    "destination": "/docs/api-reference/podcast-network/private-feeds",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/dai-markers",
+    "destination": "/docs/api-reference/podcast-network/dai-markers",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/dci",
+    "destination": "/docs/api-reference/podcast-network/dci",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/distribution",
+    "destination": "/docs/api-reference/podcast-network/distribution",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/transcription",
+    "destination": "/docs/api-reference/podcast-network/transcription",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/ai-show-notes",
+    "destination": "/docs/api-reference/podcast-network/ai-show-notes",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/ai-chapters",
+    "destination": "/docs/api-reference/podcast-network/ai-chapters",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/monetization",
+    "destination": "/docs/api-reference/podcast-network/monetization",
+    "permanent": true
+  },
+  {
+    "source": "/docs/api-reference/d27/analytics",
+    "destination": "/docs/api-reference/podcast-network/analytics",
+    "permanent": true
+  }
+]
