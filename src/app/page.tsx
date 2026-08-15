@@ -77,13 +77,8 @@ export default function Landing() {
         <div className="relative mx-auto w-full max-w-[1100px] px-6 py-20 lg:px-10 lg:py-28">
           <p className="label-mono">Musicosy API · v1.0.0</p>
           <h1 className="mt-4 max-w-3xl text-5xl leading-[1.05] font-semibold sm:text-6xl lg:text-7xl">
-            The complete Musicosy platform reference.
+            API Documentation
           </h1>
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground lg:text-lg">
-            Bounded domains, API contracts, modal specifications, UI component
-            classification, and the full feature inventory — in one searchable
-            place for every team building Musicosy.
-          </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               href="/docs/getting-started/quickstart"
