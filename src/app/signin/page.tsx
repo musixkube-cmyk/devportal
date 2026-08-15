@@ -4,22 +4,19 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { Mail, ArrowRight } from "lucide-react";
 
 /**
- * Musicosy sign-in / sign-up.
+ * Musicosy sign-in.
  *
- * Auth options, in order of availability:
- *  1. Phone (OTP — requires SMS provider configured in Supabase)
- *  2. Email magic link (OTP — works out-of-box, just needs SMTP which Supabase provides)
- *  3. Google / Apple (OAuth — requires enabling each provider in Supabase dashboard)
- *  4. Email + password (sign-in OR sign-up — auto-fallback between the two)
+ * Auth providers, in priority order:
+ *  1. Phone (OTP — Supabase will SMS a 6-digit code)
+ *  2. Google / Apple (Supabase OAuth — opens provider, returns to /dashboard)
+ *  3. Email + password (legacy fallback — used when phone/OAuth unavailable)
  *
- * The email+password form has a mode toggle. When the user submits and the
- * server rejects with "Invalid login credentials" (sign-in mode) or "User
- * already registered" (sign-up mode), we automatically try the opposite flow
- * — this implements the "check if email exists, then sign up if not" UX
- * without requiring a separate email-existence probe.
+ * The UI mirrors the reference design from landing-home: oversized Musicosy
+ * logo on the left, vertically-stacked pill auth buttons on the right. We use
+ * Musicosy design tokens (border, foreground, label-mono) instead of the
+ * neutral-900 palette so this page matches the rest of the portal.
  *
  * `next` query param: where to send the user after auth. Defaults to /dashboard.
  * Set by middleware when redirecting an unauthenticated /dashboard/* request.
@@ -32,20 +29,14 @@ export default function SignInPage() {
   const supabase = createBrowserClient();
   const [pending, startTransition] = useTransition();
 
-  // Mode toggle: "signin" tries signInWithPassword, "signup" tries signUp
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [showPhone, setShowPhone] = useState(false);
-  const [showMagicLink, setShowMagicLink] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   function finish() {
     startTransition(() => {
@@ -57,7 +48,6 @@ export default function SignInPage() {
   // --- Phone OTP ---
   async function sendOtp() {
     setError(null);
-    setInfo(null);
     const { error } = await supabase.auth.signInWithOtp({
       phone: phone.trim(),
       options: { shouldCreateUser: true },
@@ -67,7 +57,6 @@ export default function SignInPage() {
       return;
     }
     setOtpSent(true);
-    setInfo("Code sent. Check your phone.");
   }
 
   async function verifyOtp() {
@@ -84,142 +73,30 @@ export default function SignInPage() {
     finish();
   }
 
-  // --- Email magic link (OTP via email — no OAuth config needed) ---
-  async function sendMagicLink() {
-    setError(null);
-    setInfo(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setMagicLinkSent(true);
-    setInfo(`Magic link sent to ${email.trim()}. Click the link in the email to continue.`);
-  }
-
   // --- OAuth ---
   async function oauth(provider: "google" | "apple") {
     setError(null);
-    setInfo(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
-    if (error) {
-      // Provider not enabled in Supabase dashboard — give a clearer hint
-      if (error.message.includes("provider is not enabled") || error.message.includes("Unsupported provider")) {
-        setError(
-          `${provider === "google" ? "Google" : "Apple"} sign-in is not enabled. ` +
-          `Enable it in Supabase Dashboard → Authentication → Providers, ` +
-          `or use email magic link below.`,
-        );
-      } else {
-        setError(error.message);
-      }
-    }
+    if (error) setError(error.message);
   }
 
-  // --- Email + password (sign-in OR sign-up, with auto-fallback) ---
-  async function submitEmailPassword() {
+  // --- Email + password ---
+  async function signInWithEmail() {
     setError(null);
-    setInfo(null);
-
-    if (mode === "signin") {
-      // 1) Try sign-in
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      if (!error) {
-        finish();
-        return;
-      }
-      // 2) If "Invalid login credentials", the user may not exist yet — try sign-up
-      if (
-        error.message.toLowerCase().includes("invalid login credentials") ||
-        error.code === "invalid_credentials"
-      ) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-          },
-        });
-        if (signUpError) {
-          setError(signUpError.message);
-          return;
-        }
-        // 3) If email confirmation is OFF, signUp returns a session — done.
-        if (signUpData.session) {
-          finish();
-          return;
-        }
-        // 4) Email confirmation is ON — tell user to check inbox (info, not error)
-        setInfo(
-          `Account created. We sent a confirmation link to ${email.trim()} — ` +
-          `click it to verify your email, then sign in. ` +
-          `(To skip this step in dev, disable "Confirm email" in Supabase Dashboard → Authentication → Providers.)`,
-        );
-        return;
-      }
-      // Other sign-in error (rate limit, etc.)
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) {
       setError(error.message);
       return;
     }
-
-    // mode === "signup"
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    if (signUpError) {
-      // If user already exists, fall back to sign-in
-      if (
-        signUpError.message.toLowerCase().includes("already been registered") ||
-        signUpError.message.toLowerCase().includes("already registered") ||
-        signUpError.code === "user_already_exists"
-      ) {
-        const { data: signInData, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
-        if (signInError) {
-          setError(
-            `An account with this email already exists, but the password didn't match. ` +
-            `Try signing in with the correct password, or use "Sign in" mode.`,
-          );
-          return;
-        }
-        finish();
-        return;
-      }
-      setError(signUpError.message);
-      return;
-    }
-    // Email confirmation off → session present → done
-    if (signUpData.session) {
-      finish();
-      return;
-    }
-    // Email confirmation on → show message (info, not error)
-    setInfo(
-      `Account created. We sent a confirmation link to ${email.trim()} — ` +
-      `click it to verify your email, then sign in. ` +
-      `(To skip this step in dev, disable "Confirm email" in Supabase Dashboard → Authentication → Providers.)`,
-    );
+    finish();
   }
 
   return (
@@ -355,44 +232,10 @@ export default function SignInPage() {
           {/* Password — slow reveal after email Continue */}
           <div
             className={`grid transition-all duration-500 ease-in-out ${
-              showPassword ? "mt-4 max-h-60 opacity-100" : "mt-0 max-h-0 opacity-0"
+              showPassword ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
             }`}
             style={{ overflow: showPassword ? "visible" : "hidden" }}
           >
-            {/* Mode toggle */}
-            <div className="mb-3 flex items-center gap-1 rounded-full border border-border bg-surface p-1 text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("signin");
-                  setError(null);
-                  setInfo(null);
-                }}
-                className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
-                  mode === "signin"
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("signup");
-                  setError(null);
-                  setInfo(null);
-                }}
-                className={`flex-1 rounded-full px-4 py-2 font-medium transition-colors ${
-                  mode === "signup"
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Create account
-              </button>
-            </div>
-
             <label htmlFor="password" className="sr-only">
               Password
             </label>
@@ -401,58 +244,24 @@ export default function SignInPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "signup" ? "Create a password" : "Password"}
+              placeholder="Password"
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
               type="button"
               disabled={!password.trim() || pending}
-              onClick={submitEmailPassword}
+              onClick={signInWithEmail}
               className={`mt-3 flex h-14 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
                 !password.trim() ? "pointer-events-none opacity-40" : ""
               }`}
             >
-              {mode === "signup" ? "Create account" : "Sign in"}
+              Sign in
             </button>
-
-            {/* Magic link — only relevant in sign-in mode */}
-            {mode === "signin" && (
-              <button
-                type="button"
-                disabled={!email.trim() || pending}
-                onClick={() => setShowMagicLink(!showMagicLink)}
-                className="mt-3 flex w-full items-center justify-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-              >
-                <Mail className="h-4 w-4" />
-                {showMagicLink ? "Hide magic link" : "Use a magic link instead"}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-
-            {/* Magic link action — slow reveal */}
-            {mode === "signin" && showMagicLink && !magicLinkSent && (
-              <button
-                type="button"
-                disabled={!email.trim() || pending}
-                onClick={sendMagicLink}
-                className={`mt-2 flex h-12 items-center justify-center rounded-full border border-border bg-background font-medium text-foreground transition-colors hover:bg-surface ${
-                  !email.trim() ? "pointer-events-none opacity-40" : ""
-                }`}
-              >
-                Send magic link to {email.trim() || "my email"}
-              </button>
-            )}
           </div>
 
           {error && (
-            <p className="mt-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
+            <p className="mt-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {error}
-            </p>
-          )}
-
-          {info && (
-            <p className="mt-4 rounded-md border border-foreground/20 bg-foreground/5 px-3 py-2 text-xs leading-relaxed text-foreground">
-              {info}
             </p>
           )}
 
