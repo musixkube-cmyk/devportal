@@ -1,5 +1,4 @@
 import { getCurrentUser } from "@/lib/session";
-import { db } from "@/lib/db";
 
 export const metadata = { title: "Settings · Dashboard · Musicosy" };
 export const dynamic = "force-dynamic";
@@ -8,9 +7,12 @@ export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const profile = await db.developerProfile.findUnique({
-    where: { userId: user.id },
-  });
+  // Profile fields are stored directly on auth.users.raw_user_meta_data —
+  // no separate developer_profiles table, no sync, no Prisma.
+  const meta = user.user_metadata ?? {};
+  const displayName = (meta.display_name as string | undefined) ?? "—";
+  const companyName = (meta.company_name as string | undefined) ?? "—";
+  const website = (meta.website as string | undefined) ?? "—";
 
   return (
     <div className="mx-auto w-full max-w-[1000px] space-y-6">
@@ -26,11 +28,16 @@ export default async function SettingsPage() {
           <Row label="Account email" value={user.email ?? "—"} />
           <Row label="Phone" value={user.phone ?? "—"} />
           <Row label="User ID" value={user.id} mono />
-          <Row label="Display name" value={profile?.displayName ?? "—"} />
-          <Row label="Company" value={profile?.companyName ?? "—"} />
-          <Row label="Tier" value={profile?.tier ?? "free"} />
+          <Row label="Display name" value={displayName} />
+          <Row label="Company" value={companyName} />
+          <Row label="Website" value={website} />
         </dl>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Profile fields are stored on your Supabase auth user record. To update
+        them, use the <code className="font-mono">supabase.auth.updateUser()</code> API.
+      </p>
     </div>
   );
 }

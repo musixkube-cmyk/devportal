@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
-import { db } from "@/lib/db";
+import { createServerClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Dashboard · Musicosy" };
 export const dynamic = "force-dynamic";
@@ -10,16 +10,23 @@ export default async function DashboardHome() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const [keyCount, activeKeyCount, webhookCount] = await Promise.all([
-    db.apiKey.count({ where: { userId: user.id } }),
-    db.apiKey.count({
-      where: {
-        userId: user.id,
-        revokedAt: null,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
-    }),
-    db.webhook.count({ where: { userId: user.id } }),
+  // RLS scopes every query to the current user — no `WHERE userId = $1`
+  // needed. The Supabase server client carries the session JWT from the
+  // cookie, so Postgres sees auth.uid() = user.id and the RLS policies
+  // filter automatically.
+  const supabase = await createServerClient();
+
+  const [
+    { count: keyCount },
+    { count: activeKeyCount },
+    { count: webhookCount },
+  ] = await Promise.all([
+    supabase.from("api_keys").select("*", { count: "exact", head: true }),
+    supabase
+      .from("api_keys")
+      .select("*", { count: "exact", head: true })
+      .is("revokedAt", null),
+    supabase.from("webhooks").select("*", { count: "exact", head: true }),
   ]);
 
   return (
@@ -34,9 +41,9 @@ export default async function DashboardHome() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Total keys" value={keyCount} />
-        <Stat label="Active keys" value={activeKeyCount} />
-        <Stat label="Webhooks" value={webhookCount} />
+        <Stat label="Total keys" value={keyCount ?? 0} />
+        <Stat label="Active keys" value={activeKeyCount ?? 0} />
+        <Stat label="Webhooks" value={webhookCount ?? 0} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

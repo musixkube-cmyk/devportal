@@ -296,7 +296,8 @@ function CreateKeyModal({
 
 function RevealModal({ created, onClose }: { created: CreatedKey; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const full = `sk_live_${created.rawSecret}`;
+  // rawSecret already includes the `sk_live_` prefix (see generateApiKey)
+  const full = created.rawSecret;
 
   async function copy() {
     try {

@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
-import { db } from "@/lib/db";
+import { createServerClient } from "@/lib/supabase/server";
 import { KeysList } from "@/components/dashboard/KeysList";
 
 export const metadata = {
@@ -12,22 +12,28 @@ export default async function KeysPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const keys = await db.apiKey.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      label: true,
-      prefix: true,
-      lastFour: true,
-      scopes: true,
-      revokedAt: true,
-      expiresAt: true,
-      lastUsedAt: true,
-      createdAt: true,
-    },
-  });
+  // RLS scopes this query to the current user — no `WHERE userId = ...`
+  const supabase = await createServerClient();
+  const { data: keys, error } = await supabase
+    .from("api_keys")
+    .select(
+      "id, label, prefix, lastFour, scopes, revokedAt, expiresAt, lastUsedAt, createdAt",
+    )
+    .order("createdAt", { ascending: false });
 
+  if (error) {
+    return (
+      <div className="mx-auto w-full max-w-[1000px] space-y-8">
+        <header>
+          <h1 className="font-display text-2xl font-semibold">API Keys</h1>
+        </header>
+        <p className="text-sm text-destructive">Failed to load keys: {error.message}</p>
+      </div>
+    );
+  }
+
+  // Supabase returns snake_case-ish (actually camelCase since columns are camelCase)
+  // but the JSON shape matches what KeysList expects.
   return (
     <div className="mx-auto w-full max-w-[1000px] space-y-8">
       <header className="space-y-3">
@@ -43,7 +49,7 @@ export default async function KeysPage() {
         </p>
       </header>
 
-      <KeysList initialKeys={keys} />
+      <KeysList initialKeys={keys ?? []} />
     </div>
   );
 }

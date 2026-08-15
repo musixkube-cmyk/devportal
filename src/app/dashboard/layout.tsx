@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, KeyRound, Activity, Webhook, Settings } from "lucide-react";
-import { getCurrentUser, ensureDeveloperProfile } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import { DashboardSignOutButton } from "@/components/dashboard/DashboardSignOutButton";
 
 export const metadata = {
@@ -25,7 +25,6 @@ export default async function DashboardLayout({
   if (!user) {
     redirect("/signin?next=/dashboard");
   }
-  await ensureDeveloperProfile(user.id);
 
   return (
     <div className="flex min-h-screen bg-background">

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/session";
-import { db } from "@/lib/db";
+import { createServerClient } from "@/lib/supabase/server";
 import { generateApiKey } from "@/lib/api-keys";
 
 /**
@@ -11,6 +11,8 @@ import { generateApiKey } from "@/lib/api-keys";
  * stops working immediately.
  *
  * Use case: key compromise, rotation policy, or user lost the secret string.
+ *
+ * RLS scopes every query to the current user.
  */
 export async function POST(
   request: NextRequest,
@@ -21,10 +23,15 @@ export async function POST(
 
   const { id } = await params;
 
-  const key = await db.apiKey.findFirst({
-    where: { id, userId: user.id },
-    select: { id: true, label: true, revokedAt: true },
-  });
+  const supabase = await createServerClient();
+
+  const { data: key, error: findErr } = await supabase
+    .from("api_keys")
+    .select("id, label, revokedAt")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
   if (!key) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (key.revokedAt) {
     return NextResponse.json({ error: "cannot roll a revoked key" }, { status: 400 });
@@ -32,20 +39,12 @@ export async function POST(
 
   const { rawSecret, hashedKey, prefix, lastFour } = generateApiKey();
 
-  await db.apiKey.update({
-    where: { id },
-    data: { hashedKey, prefix, lastFour },
-  });
+  const { error: updateErr } = await supabase
+    .from("api_keys")
+    .update({ hashedKey, prefix, lastFour })
+    .eq("id", id);
 
-  await db.auditLog
-    .create({
-      data: {
-        userId: user.id,
-        action: "api_key.roll",
-        subject: { apiKeyId: id, label: key.label },
-      },
-    })
-    .catch(() => undefined);
+  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
   return NextResponse.json({ id, label: key.label, rawSecret });
 }

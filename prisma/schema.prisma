@@ -20,7 +20,7 @@ datasource db {
 // API Keys — long-lived server-to-server credentials (`sk_live_xxx`)
 // -----------------------------------------------------------------------------
 model ApiKey {
-  id            String   @id @default(cuid())
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Text
   // Supabase auth.users.id — owner of this key
   userId        String
   // Human label e.g. "Production backend", "CI runner"
@@ -45,7 +45,7 @@ model ApiKey {
   // Number of times this key has been used (lifetime)
   lastUsedIp    String?
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime @default(now()) @updatedAt
 
   @@index([userId])
   @@index([hashedKey])
@@ -109,7 +109,7 @@ model UsageDaily {
 // Webhooks — user-configured endpoints that Musicosy calls on events
 // -----------------------------------------------------------------------------
 model Webhook {
-  id            String   @id @default(cuid())
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Text
   userId        String
   // e.g. "Track upload notifications"
   label         String
@@ -131,7 +131,7 @@ model Webhook {
   lastDeliveryStatus Int? // HTTP code from their server
   lastDeliveryError String?
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime @default(now()) @updatedAt
 
   @@index([userId])
   @@map("webhooks")

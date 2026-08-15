@@ -1,9 +1,12 @@
 import { createServerClient } from "@/lib/supabase/server";
-import { db } from "@/lib/db";
 
 /**
  * Returns the current Supabase user, or null if not authenticated.
  * Server-only. Use inside Server Components / Route Handlers / Server Actions.
+ *
+ * No Prisma. The Supabase server client reads the session cookie via
+ * next/headers and refreshes it if needed. The user object comes straight
+ * from auth.users — no separate developer_profiles table needed.
  */
 export async function getCurrentUser() {
   const supabase = await createServerClient();
@@ -34,14 +37,17 @@ export async function requireUser() {
   return user;
 }
 
-/**
- * Ensures the user has a DeveloperProfile row. Call once on dashboard entry.
- * Idempotent — safe to call on every dashboard page load.
- */
-export async function ensureDeveloperProfile(userId: string) {
-  return db.developerProfile.upsert({
-    where: { userId },
-    update: {},
-    create: { userId },
-  });
-}
+// NOTE: ensureDeveloperProfile() has been removed.
+// The old pattern of a separate `developer_profiles` table synced via Prisma
+// upsert on every dashboard mount was a decade-old antipattern. Modern
+// Supabase apps put profile fields directly on auth.users via the
+// `raw_user_meta_data` JSONB column (or `raw_app_meta_data` for server-only
+// fields). No sync, no separate table, no Prisma.
+//
+// To read profile fields:
+//   const user = await getCurrentUser();
+//   const displayName = user.user_metadata?.display_name ?? null;
+//
+// To write profile fields (server-side):
+//   const supabase = await createServerClient();
+//   await supabase.auth.updateUser({ data: { display_name: "..." } });
