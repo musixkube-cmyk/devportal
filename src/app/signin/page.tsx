@@ -40,10 +40,11 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
 
   function finish() {
-    startTransition(() => {
-      router.refresh();
-      router.replace(next);
-    });
+    // Hard navigation — not router.replace. The session cookie written by
+    // supabase-js needs to be in the request headers for the /dashboard
+    // middleware check. A soft client-side navigation can race with the
+    // cookie write and cause a redirect loop (dashboard → signin → dashboard).
+    window.location.assign(next);
   }
 
   // --- Check email → set flow ---

@@ -32,14 +32,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If already logged in and visiting /signin, send to dashboard.
-  if (user && pathname === "/signin") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    url.searchParams.delete("next");
-    return NextResponse.redirect(url);
-  }
-
   return response;
 }
 
