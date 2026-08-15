@@ -6,20 +6,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 /**
- * Musicosy sign-in.
+ * Musicosy sign-in / sign-up.
  *
- * Auth providers, in priority order:
- *  1. Phone (OTP — Supabase will SMS a 6-digit code)
- *  2. Google / Apple (Supabase OAuth — opens provider, returns to /dashboard)
- *  3. Email + password (legacy fallback — used when phone/OAuth unavailable)
+ * Behavior (per spec): the form queries Supabase to check if the email
+ * exists BEFORE showing the password field. If the email is registered,
+ * the password form runs sign-in. If it isn't, the password form runs
+ * sign-up via /api/auth/signup (which uses the admin client to create
+ * the user with email_confirm=true — no confirmation email is ever sent,
+ * so Supabase's email rate limit is never hit). After sign-up succeeds,
+ * we immediately sign the user in client-side.
  *
- * The UI mirrors the reference design from landing-home: oversized Musicosy
- * logo on the left, vertically-stacked pill auth buttons on the right. We use
- * Musicosy design tokens (border, foreground, label-mono) instead of the
- * neutral-900 palette so this page matches the rest of the portal.
+ * Phone / Google / Apple buttons match the reference design from
+ * landing-home. They will show Supabase's native error if a provider
+ * isn't enabled — no custom handling, no extra UI added.
  *
- * `next` query param: where to send the user after auth. Defaults to /dashboard.
- * Set by middleware when redirecting an unauthenticated /dashboard/* request.
+ * `next` query param is set by middleware when redirecting from /dashboard/*.
  */
 export default function SignInPage() {
   const router = useRouter();
@@ -34,15 +35,102 @@ export default function SignInPage() {
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [showPhone, setShowPhone] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  // flow is set after the email "Continue" click — drives button label + behavior
+  const [flow, setFlow] = useState<"signin" | "signup" | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   function finish() {
-    startTransition(() => {
-      router.refresh();
-      router.replace(next);
+    // Hard navigation — not router.replace. The session cookie written by
+    // supabase-js needs to be in the request headers for the /dashboard
+    // middleware check. A soft client-side navigation can race with the
+    // cookie write and cause a redirect loop (dashboard → signin → dashboard).
+    window.location.assign(next);
+  }
+
+  // --- Check email → set flow ---
+  async function checkEmailAndContinue() {
+    setError(null);
+    setInfo(null);
+    setCheckingEmail(true);
+    try {
+      const res = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Could not verify email. Try again.");
+        return;
+      }
+      const { exists } = await res.json();
+      setFlow(exists ? "signin" : "signup");
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setCheckingEmail(false);
+    }
+  }
+
+  // --- Submit password (sign-in or sign-up based on flow) ---
+  async function submitPassword() {
+    setError(null);
+    setInfo(null);
+
+    if (flow === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      finish();
+      return;
+    }
+
+    // flow === "signup"
+    // Use the server-side admin route to create the user with
+    // email_confirm=true — no confirmation email is sent.
+    let signupRes;
+    try {
+      signupRes = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+    } catch {
+      setError("Network error during sign-up. Try again.");
+      return;
+    }
+
+    if (!signupRes.ok) {
+      const data = await signupRes.json().catch(() => ({}));
+      setError(data.error || "Sign-up failed. Try again.");
+      return;
+    }
+
+    // Account created (and email_confirmed_at set). Now sign in client-side
+    // to obtain a session.
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
     });
+    if (signInError) {
+      // Account was created but sign-in failed — rare, but tell the user
+      // to try signing in manually.
+      setInfo(
+        `Account created. Please sign in with your email and password.`,
+      );
+      setFlow("signin");
+      setPassword("");
+      return;
+    }
+    finish();
   }
 
   // --- Phone OTP ---
@@ -85,20 +173,6 @@ export default function SignInPage() {
     if (error) setError(error.message);
   }
 
-  // --- Email + password ---
-  async function signInWithEmail() {
-    setError(null);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    finish();
-  }
-
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="px-6 pt-8 md:px-12">
@@ -111,7 +185,7 @@ export default function SignInPage() {
       </div>
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-16 px-6 py-14 md:px-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-24 lg:py-24">
-        {/* Left: oversized Musicosy logo */}
+        {/* Left: logo */}
         <div className="flex items-center justify-start">
           <img
             src="/musicosy-logo.png"
@@ -213,28 +287,30 @@ export default function SignInPage() {
               id="identifier"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                // Reset flow when email changes — need to re-check before submit
+                if (flow) setFlow(null);
+              }}
               placeholder="Email or username"
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
               type="button"
-              disabled={!email.trim() || pending}
-              onClick={() => {
-                if (email.trim()) setShowPassword(true);
-              }}
+              disabled={!email.trim() || checkingEmail || pending}
+              onClick={checkEmailAndContinue}
               className="mt-4 h-14 w-full rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 disabled:bg-border disabled:text-muted-foreground"
             >
-              Continue
+              {checkingEmail ? "Checking…" : "Continue"}
             </button>
           </div>
 
-          {/* Password — slow reveal after email Continue */}
+          {/* Password — slow reveal after email check resolves the flow */}
           <div
             className={`grid transition-all duration-500 ease-in-out ${
-              showPassword ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
+              flow ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
             }`}
-            style={{ overflow: showPassword ? "visible" : "hidden" }}
+            style={{ overflow: flow ? "visible" : "hidden" }}
           >
             <label htmlFor="password" className="sr-only">
               Password
@@ -244,24 +320,30 @@ export default function SignInPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
+              placeholder={flow === "signup" ? "Create a password" : "Password"}
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
               type="button"
               disabled={!password.trim() || pending}
-              onClick={signInWithEmail}
+              onClick={submitPassword}
               className={`mt-3 flex h-14 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
                 !password.trim() ? "pointer-events-none opacity-40" : ""
               }`}
             >
-              Sign in
+              {flow === "signup" ? "Create account" : "Sign in"}
             </button>
           </div>
 
           {error && (
-            <p className="mt-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <p className="mt-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
               {error}
+            </p>
+          )}
+
+          {info && (
+            <p className="mt-4 rounded-md border border-foreground/20 bg-foreground/5 px-3 py-2 text-xs leading-relaxed text-foreground">
+              {info}
             </p>
           )}
 
