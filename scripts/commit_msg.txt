@@ -1,0 +1,43 @@
+refactor(dashboard): non-blocking client-shell pattern
+
+Replace the legacy "wait for DB then render HTML" dashboard architecture
+with the modern non-blocking pattern.
+
+BEFORE:
+- layout.tsx was a server component calling getCurrentUser() on every load
+- Each page was a server component doing parallel Supabase queries
+- Render phase blocked on DB round-trip, causing PrismaClientInitialization
+  errors when DATABASE_URL env was wrong
+- Usage / Webhooks pages were "Coming soon" stubs
+
+AFTER:
+- layout.tsx is a thin server component, ZERO DB calls
+- DashboardShell is a client component that mounts instantly (sidebar +
+  header + main container all present on first paint)
+- Each page is a client component using useFetch() + useEffect
+- Skeletons show while data loads (per-component, not full-page)
+- Module-level caches on useCurrentUser + useFetch give instant render
+  on navigation back to a page
+
+NEW:
+- /api/me - cheap cookie read for shell header email
+- /api/dashboard/stats - overview counts
+- /api/dashboard/usage - 30-day aggregates + top endpoints
+- /api/dashboard/webhooks (GET/POST) + /api/dashboard/webhooks/[id] (PATCH/DELETE)
+- src/hooks/dashboard/{useCurrentUser,useFetch}.ts
+- src/components/dashboard/DashboardShell.tsx
+
+REAL IMPLEMENTATIONS (no more stubs):
+- /dashboard/usage: stat tiles + SVG sparkline + top endpoints + daily table
+- /dashboard/webhooks: full CRUD with create/reveal-once-secret/toggle/delete
+- /dashboard/settings: editable profile fields via supabase.auth.updateUser
+
+Render times (warm, server-side, just JSX serialization):
+  /dashboard         38ms
+  /dashboard/keys    77ms
+  /dashboard/usage   60ms
+  /dashboard/webhooks 51ms
+  /dashboard/settings 62ms
+
+All under 100ms. Middleware JWT refresh (~250-430ms at the edge) is the
+only remaining latency, and it does not block rendering.

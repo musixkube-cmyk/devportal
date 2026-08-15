@@ -1,55 +1,35 @@
-import { getCurrentUser } from "@/lib/session";
-import { createServerClient } from "@/lib/supabase/server";
+"use client";
+
 import { KeysList } from "@/components/dashboard/KeysList";
 
-export const metadata = {
-  title: "API Keys · Dashboard · Musicosy",
-};
-
-export const dynamic = "force-dynamic";
-
-export default async function KeysPage() {
-  const user = await getCurrentUser();
-  if (!user) return null;
-
-  // RLS scopes this query to the current user — no `WHERE userId = ...`
-  const supabase = await createServerClient();
-  const { data: keys, error } = await supabase
-    .from("api_keys")
-    .select(
-      "id, label, prefix, lastFour, scopes, revokedAt, expiresAt, lastUsedAt, createdAt",
-    )
-    .order("createdAt", { ascending: false });
-
-  if (error) {
-    return (
-      <div className="mx-auto w-full max-w-[1000px] space-y-8">
-        <header>
-          <h1 className="font-display text-2xl font-semibold">API Keys</h1>
-        </header>
-        <p className="text-sm text-destructive">Failed to load keys: {error.message}</p>
-      </div>
-    );
-  }
-
-  // Supabase returns snake_case-ish (actually camelCase since columns are camelCase)
-  // but the JSON shape matches what KeysList expects.
+/**
+ * API Keys page — client component.
+ *
+ * The page itself is a thin shell. It does NOT fetch on the server. The
+ * `KeysList` component manages its own data: it fires `GET /api/dashboard/keys`
+ * on mount via `useEffect` and shows skeleton rows while loading.
+ *
+ * Server-render phase: ~0ms (just JSX). The keys list fills in once the
+ * Supabase RLS query resolves (~200-400ms typical).
+ */
+export default function KeysPage() {
   return (
     <div className="mx-auto w-full max-w-[1000px] space-y-8">
       <header className="space-y-3">
         <div className="flex items-baseline justify-between gap-4">
           <h1 className="font-display text-2xl font-semibold">API Keys</h1>
-          <p className="label-mono text-muted-foreground">{keys.length} total</p>
         </div>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
           Long-lived server-to-server credentials for the Musicosy API. Use a
           separate key per environment (production, staging, CI). Keys are
-          hashed at rest — the raw <code className="font-mono text-foreground">sk_live_…</code> value
-          is shown <strong className="text-foreground">once</strong> when you create a key. Store it in a secret manager.
+          hashed at rest — the raw{" "}
+          <code className="font-mono text-foreground">sk_live_…</code> value
+          is shown <strong className="text-foreground">once</strong> when you
+          create a key. Store it in a secret manager.
         </p>
       </header>
 
-      <KeysList initialKeys={keys ?? []} />
+      <KeysList />
     </div>
   );
 }

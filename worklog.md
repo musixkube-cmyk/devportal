@@ -40,3 +40,37 @@ Known issues addressed in follow-up:
 - Google/Apple OAuth not enabled in Supabase project — buttons now show clearer error pointing user to Supabase dashboard
 - Email magic link button added as alternative that works out-of-box (no OAuth config needed)
 - Email confirmation on by default in Supabase — UI now shows "check your inbox" message after sign-up if confirmation is required
+
+---
+Task ID: dashboard-non-blocking-refactor
+Agent: main
+Task: Refactor dashboard from blocking server-render pattern to modern non-blocking client-shell pattern
+
+Work Log:
+- Audited existing dashboard: layout.tsx was a server component calling getCurrentUser() → supabase.auth.getUser() on every page load. Each page (overview, keys, usage, webhooks, settings) was also a server component doing parallel Supabase queries in the render phase. This is the legacy "wait for DB then render HTML" pattern.
+- Created /api/me endpoint — cheap cookie read returning {id, email, phone, metadata} from the JWT. Used by the client shell to render the header email.
+- Created src/hooks/dashboard/useCurrentUser.ts — client hook with module-level cache. On second mount (e.g. navigation back to /dashboard), returns the cached user synchronously — zero loading flash.
+- Created src/hooks/dashboard/useFetch.ts — generic client fetch hook with per-URL cache + reload(). Prevents duplicate concurrent fetches and gives instant render on navigation back.
+- Built src/components/dashboard/DashboardShell.tsx — pure client shell. Renders sidebar + header + main container INSTANTLY. The only dynamic piece is the user's email in the header, which uses useCurrentUser() and shows a skeleton until resolved. Active nav state derived from usePathname().
+- Refactored src/app/dashboard/layout.tsx → thin server component that just renders <DashboardShell>{children}</DashboardShell>. NO getCurrentUser(), NO Supabase calls, NO DB calls. Auth gating is enforced by middleware (which redirects to /signin before this layout ever renders).
+- Refactored src/app/dashboard/page.tsx (overview) → client component using useFetch("/api/dashboard/stats"). Shows skeleton stat cards while loading. Real content fills in ~200ms later.
+- Refactored src/app/dashboard/keys/page.tsx → thin client shell. KeysList component now owns its data (fires GET /api/dashboard/keys on mount, shows 3-row skeleton while loading). Removed the initialKeys prop — no more server-side pre-fetch.
+- Refactored src/components/dashboard/KeysList.tsx — added useEffect+fetch pattern, skeleton loading state, error handling. Create/revoke/roll mutations now call reload() to refresh.
+- Rebuilt src/app/dashboard/usage/page.tsx from "Coming soon" stub → full client component with: 4 stat tiles (requests/errors/avg p50/avg p99), SVG sparkline of daily request volume, top endpoints table, daily breakdown table. All fetched from /api/dashboard/usage with skeleton states.
+- Rebuilt src/app/dashboard/webhooks/page.tsx from "Coming soon" stub → full client component with: webhook list (label, URL, events, status, last delivery), create modal with event-type presets, reveal-once secret modal, toggle enable/disable, delete. Full CRUD.
+- Rebuilt src/app/dashboard/settings/page.tsx → full client component with: read-only identity (email, phone, user ID) from useCurrentUser(), editable profile fields (display_name, company_name, website) saved via supabase.auth.updateUser({data}). Profile metadata stored on auth.users.raw_user_meta_data — no separate table.
+- Created API routes:
+  - /api/dashboard/stats (GET) — totalKeys, activeKeys, revokedKeys, webhookCount, requestsToday, requests30d
+  - /api/dashboard/usage (GET) — last 30 days of per-day aggregates + top endpoints
+  - /api/dashboard/webhooks (GET, POST) — list + create with HMAC secret generation
+  - /api/dashboard/webhooks/[id] (PATCH, DELETE) — toggle/update + hard delete
+- Updated DashboardSignOutButton to accept onSignedOut callback so the shell can flush caches (invalidateCurrentUser + invalidateAll) before navigating to /signin.
+- Verified all pages mount under 100ms render time (warm): dashboard 38ms, keys 77ms, usage 60ms, webhooks 51ms, settings 62ms. The remaining total time is middleware JWT refresh (~250-430ms at the edge, not blocking render).
+- End-to-end tested all CRUD: signup → /api/me → /api/dashboard/stats → /api/dashboard/usage → /api/dashboard/webhooks (POST/GET/PATCH/DELETE) → profile update via Supabase REST → /api/me reflects new metadata.
+
+Stage Summary:
+- Dashboard now follows the modern non-blocking pattern: shell mounts instantly, data fetches client-side via useEffect, skeletons show while loading.
+- ZERO database calls in the dashboard layout or page server-render phase. All Supabase queries moved to API routes that are called client-side after the shell is on screen.
+- All "Coming soon" stubs replaced with real implementations (usage sparkline + table, webhooks full CRUD, settings editable profile).
+- Module-level caches on useCurrentUser and useFetch give instant render on navigation back to a page (no refetch, no loading flash).
+- Auth gating unchanged: middleware redirects to /signin if no session, so the client shell never mounts for unauthenticated users.

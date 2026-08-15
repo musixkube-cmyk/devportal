@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Copy, Check, KeyRound, Plus, RotateCcw, Trash2 } from "lucide-react";
 
 type ApiKeyRow = {
@@ -17,46 +17,90 @@ type ApiKeyRow = {
 
 type CreatedKey = {
   id: string;
-  rawSecret: string; // shown only here
+  rawSecret: string;
   label: string;
 };
 
-export function KeysList({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
-  const [keys, setKeys] = useState<ApiKeyRow[]>(initialKeys);
+/**
+ * KeysList — owns its data.
+ *
+ * On mount, fires `GET /api/dashboard/keys`. While the request is in flight,
+ * the table renders a 3-row skeleton so the page is visually complete
+ * immediately. After resolve, rows swap in.
+ *
+ * Mutations (create / roll / revoke) fire their own endpoints, then call
+ * `reload()` to refresh the list. Optimistic UI: the create button stays
+ * disabled until the modal returns, the row appears on next reload.
+ *
+ * No server-side pre-fetching — the dashboard shell is already on screen
+ * by the time this fetch starts.
+ */
+export function KeysList() {
+  const [keys, setKeys] = useState<ApiKeyRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState<CreatedKey | null>(null);
   const [busy, start] = useTransition();
 
-  function refresh() {
-    start(async () => {
+  async function reload() {
+    try {
       const res = await fetch("/api/dashboard/keys", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setKeys(data.keys);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as { error?: string }).error || `HTTP ${res.status}`,
+        );
       }
-    });
+      const data = await res.json();
+      setKeys(data.keys as ApiKeyRow[]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load keys");
+      setKeys([]);
+    }
   }
 
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function revoke(id: string) {
-    if (!confirm("Revoke this API key? This cannot be undone. Any service still using it will lose access immediately.")) {
+    if (
+      !confirm(
+        "Revoke this API key? This cannot be undone. Any service still using it will lose access immediately.",
+      )
+    ) {
       return;
     }
     start(async () => {
-      const res = await fetch(`/api/dashboard/keys/${id}/revoke`, { method: "POST" });
-      if (res.ok) refresh();
+      const res = await fetch(`/api/dashboard/keys/${id}/revoke`, {
+        method: "POST",
+      });
+      if (res.ok) reload();
     });
   }
 
   async function roll(id: string) {
-    if (!confirm("Roll this API key? A new secret will be generated and the old one will stop working immediately.")) {
+    if (
+      !confirm(
+        "Roll this API key? A new secret will be generated and the old one will stop working immediately.",
+      )
+    ) {
       return;
     }
     start(async () => {
-      const res = await fetch(`/api/dashboard/keys/${id}/roll`, { method: "POST" });
+      const res = await fetch(`/api/dashboard/keys/${id}/roll`, {
+        method: "POST",
+      });
       if (res.ok) {
         const data = await res.json();
-        setRevealed({ id: data.id, rawSecret: data.rawSecret, label: data.label });
-        refresh();
+        setRevealed({
+          id: data.id,
+          rawSecret: data.rawSecret,
+          label: data.label,
+        });
+        reload();
       }
     });
   }
@@ -68,7 +112,8 @@ export function KeysList({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
         <div>
           <p className="font-display text-sm font-semibold">Your keys</p>
           <p className="text-xs text-muted-foreground">
-            Keys are prefixed <code className="font-mono">sk_live_</code>. Treat them like passwords.
+            Keys are prefixed <code className="font-mono">sk_live_</code>.
+            Treat them like passwords.
           </p>
         </div>
         <button
@@ -81,12 +126,20 @@ export function KeysList({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
         </button>
       </div>
 
-      {/* Table */}
-      {keys.length === 0 ? (
+      {/* Table — three states: loading skeleton, error, empty, populated */}
+      {error ? (
+        <div className="border border-border border-t-0 p-6 text-sm text-destructive">
+          {error}
+        </div>
+      ) : keys === null ? (
+        <SkeletonRows />
+      ) : keys.length === 0 ? (
         <div className="border border-border border-t-0 p-12 text-center">
           <KeyRound className="mx-auto size-6 text-muted-foreground" />
           <p className="mt-3 text-sm font-medium">No API keys yet</p>
-          <p className="text-xs text-muted-foreground">Create your first key to start calling the Musicosy API.</p>
+          <p className="text-xs text-muted-foreground">
+            Create your first key to start calling the Musicosy API.
+          </p>
         </div>
       ) : (
         <div className="overflow-hidden border border-border">
@@ -166,19 +219,39 @@ export function KeysList({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
           onCreated={(k) => {
             setRevealed(k);
             setCreating(false);
-            refresh();
+            reload();
           }}
         />
       )}
 
       {/* Reveal modal */}
       {revealed && (
-        <RevealModal
-          created={revealed}
-          onClose={() => setRevealed(null)}
-        />
+        <RevealModal created={revealed} onClose={() => setRevealed(null)} />
       )}
     </>
+  );
+}
+
+function SkeletonRows() {
+  return (
+    <div className="overflow-hidden border border-border">
+      <div className="border-b border-border bg-surface px-4 py-2.5">
+        <div className="h-3 w-20 animate-pulse bg-muted" />
+      </div>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-0"
+        >
+          <div className="h-4 w-32 animate-pulse bg-muted" />
+          <div className="h-4 flex-1 animate-pulse bg-muted" />
+          <div className="h-4 w-16 animate-pulse bg-muted" />
+          <div className="h-4 w-20 animate-pulse bg-muted" />
+          <div className="h-4 w-20 animate-pulse bg-muted" />
+          <div className="h-6 w-16 animate-pulse bg-muted" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -200,10 +273,13 @@ function CreateKeyModal({
     setSubmitting(true);
     try {
       const expiresAt =
-        expiry === "never" ? null :
-        expiry === "30d" ? new Date(Date.now() + 30 * 86400_000).toISOString() :
-        expiry === "90d" ? new Date(Date.now() + 90 * 86400_000).toISOString() :
-        null;
+        expiry === "never"
+          ? null
+          : expiry === "30d"
+            ? new Date(Date.now() + 30 * 86400_000).toISOString()
+            : expiry === "90d"
+              ? new Date(Date.now() + 90 * 86400_000).toISOString()
+              : null;
       const res = await fetch("/api/dashboard/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -231,7 +307,9 @@ function CreateKeyModal({
             placeholder="Production backend"
             className="mt-1 h-10 w-full border border-border bg-background px-3 text-sm focus:border-foreground focus:outline-none"
           />
-          <p className="mt-1 text-xs text-muted-foreground">Helps you identify this key later. Visible to your team.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Helps you identify this key later. Visible to your team.
+          </p>
         </div>
 
         <div>
@@ -242,7 +320,9 @@ function CreateKeyModal({
             className="mt-1 h-10 w-full border border-border bg-background px-3 font-mono text-xs focus:border-foreground focus:outline-none"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Comma-separated. Use <code className="font-mono">read:all,write:all</code> for full access.
+            Comma-separated. Use{" "}
+            <code className="font-mono">read:all,write:all</code> for full
+            access.
           </p>
         </div>
 
@@ -271,7 +351,9 @@ function CreateKeyModal({
         </div>
 
         {error && (
-          <p className="rounded border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
+          <p className="rounded border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {error}
+          </p>
         )}
 
         <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -294,9 +376,14 @@ function CreateKeyModal({
   );
 }
 
-function RevealModal({ created, onClose }: { created: CreatedKey; onClose: () => void }) {
+function RevealModal({
+  created,
+  onClose,
+}: {
+  created: CreatedKey;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
-  // rawSecret already includes the `sk_live_` prefix (see generateApiKey)
   const full = created.rawSecret;
 
   async function copy() {
@@ -313,7 +400,9 @@ function RevealModal({ created, onClose }: { created: CreatedKey; onClose: () =>
     <Modal onClose={onClose} title="Key created">
       <div className="space-y-4">
         <div className="rounded border border-foreground/30 bg-surface p-3">
-          <p className="label-mono text-xs text-muted-foreground">{created.label}</p>
+          <p className="label-mono text-xs text-muted-foreground">
+            {created.label}
+          </p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 break-all font-mono text-xs">{full}</code>
             <button
@@ -321,19 +410,25 @@ function RevealModal({ created, onClose }: { created: CreatedKey; onClose: () =>
               className="shrink-0 rounded border border-border p-2 transition-colors hover:bg-background"
               title="Copy"
             >
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? (
+                <Check className="size-3.5" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
             </button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          <strong className="text-foreground">Copy this now.</strong> For security, the full key is never shown again. If you lose it, you'll need to roll the key to generate a new one.
+          <strong className="text-foreground">Copy this now.</strong> For
+          security, the full key is never shown again. If you lose it,
+          you&apos;ll need to roll the key to generate a new one.
         </p>
         <div className="flex justify-end border-t border-border pt-4">
           <button
             onClick={onClose}
             className="bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
           >
-            I've saved it
+            I&apos;ve saved it
           </button>
         </div>
       </div>
