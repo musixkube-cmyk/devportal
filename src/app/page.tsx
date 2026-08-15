@@ -87,7 +87,7 @@ export default function Landing() {
               Get started <ArrowRight className="size-4" />
             </Link>
             <Link
-              href="/docs/getting-started/authentication"
+              href="/signin?next=/dashboard/keys"
               className="inline-flex items-center gap-2 border border-foreground px-4 py-2.5 text-sm font-medium transition-colors hover:bg-foreground hover:text-background"
             >
               <KeyRound className="size-4" />

@@ -7,16 +7,15 @@ import { KeyRound, ArrowRight } from "lucide-react";
  * docs — a persistent visual reminder that the next step in the
  * developer journey is acquiring credentials.
  *
- * The CTA links to the authentication getting-started page, which
- * documents the API key flow. Swap the href for an external dashboard
- * URL (e.g. https://dashboard.musicosy.com/api-keys) once that page
- * exists.
+ * Links to /signin (Supabase auth) with `next=/dashboard/keys` so the user
+ * lands directly on the key-creation page after authenticating. Middleware
+ * will preserve this `next` param across the OAuth redirect.
  */
 export function GetKeyCta() {
   return (
     <div className="sticky bottom-0 -mx-5 mt-8 border-t border-border bg-background/95 px-5 py-4 backdrop-blur">
       <Link
-        href="/docs/getting-started/authentication"
+        href="/signin?next=/dashboard/keys"
         className="group flex items-center gap-3 border border-foreground p-3 transition-colors hover:bg-foreground hover:text-background"
       >
         <span

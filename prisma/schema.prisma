@@ -1,32 +1,207 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// =============================================================================
+// Musicosy DevPortal — Prisma schema (app data only)
+// Auth is handled by Supabase. The `userId` fields below reference
+// `auth.users.id` from the Supabase-managed auth schema — NOT a local User model.
+// =============================================================================
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")      // pooler transaction-mode (PgBouncer)
+  directUrl = env("DIRECT_URL")        // pooler session-mode (migrations)
+  // If you want Supabase's pooled pgbouncer URL at runtime and direct at
+  // migrate-time, both come from .env.local — already configured.
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// -----------------------------------------------------------------------------
+// API Keys — long-lived server-to-server credentials (`sk_live_xxx`)
+// -----------------------------------------------------------------------------
+model ApiKey {
+  id            String   @id @default(cuid())
+  // Supabase auth.users.id — owner of this key
+  userId        String
+  // Human label e.g. "Production backend", "CI runner"
+  label         String
+  // SHA-256 hash of the actual `sk_live_xxx` secret. We never store the raw key.
+  // Lookup: when a request arrives with `Authorization: Bearer sk_live_xxx`,
+  // hash it and find the matching row.
+  hashedKey     String   @unique
+  // 8-char prefix shown in UI so user can identify which key it is
+  prefix        String
+  // SHA-256 of the secret rotated to reveal the last 4 chars at creation time.
+  // (Optional — you can drop this column if you don't need last-4 display.)
+  lastFour      String?
+  // Scopes — comma-separated: "read:all,write:all" or empty for full access
+  scopes        String   @default("read:all,write:all")
+  // Soft revoke — kept for audit, no longer accepted by API gateway
+  revokedAt     DateTime?
+  // Expiry — null = no expiry
+  expiresAt     DateTime?
+  // Last time this key was used to authenticate a request
+  lastUsedAt    DateTime?
+  // Number of times this key has been used (lifetime)
+  lastUsedIp    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([hashedKey])
+  @@map("api_keys")
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// -----------------------------------------------------------------------------
+// API Key Usage Events — append-only, written by the API gateway on every
+// authenticated request. Aggregated by background job into UsageDaily.
+// -----------------------------------------------------------------------------
+model ApiKeyEvent {
+  id          BigInt   @id @default(autoincrement())
+  apiKeyId    String
+  userId      String
+  // e.g. "POST /v1/tracks"
+  method      String
+  path        String
+  // HTTP status code returned to the client
+  status      Int
+  // Response time in ms (for latency p50/p99 dashboards)
+  durationMs  Int
+  // Bytes sent in request body (uploads etc.)
+  bytesIn     Int      @default(0)
+  // Bytes sent in response body
+  bytesOut    Int      @default(0)
+  // Error code from Musicosy error catalogue if non-2xx, else null
+  errorCode   String?
+  // Optional correlation id echoed in response headers
+  requestId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([apiKeyId, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("api_key_events")
+}
+
+// -----------------------------------------------------------------------------
+// Daily Usage Rollup — one row per (apiKeyId, day) for fast chart queries
+// -----------------------------------------------------------------------------
+model UsageDaily {
+  id          BigInt   @id @default(autoincrement())
+  apiKeyId    String
+  userId      String
+  day         DateTime // midnight UTC of the day
+  requestCount Int     @default(0)
+  errorCount  Int      @default(0)
+  bytesIn     BigInt   @default(0)
+  bytesOut    BigInt   @default(0)
+  p50Ms       Int      @default(0)
+  p99Ms       Int      @default(0)
+  // Top endpoint of the day (best-effort) — for the "what did I do today" tile
+  topEndpoint String?
+
+  @@unique([apiKeyId, day])
+  @@index([userId, day])
+  @@map("usage_daily")
+}
+
+// -----------------------------------------------------------------------------
+// Webhooks — user-configured endpoints that Musicosy calls on events
+// -----------------------------------------------------------------------------
+model Webhook {
+  id            String   @id @default(cuid())
+  userId        String
+  // e.g. "Track upload notifications"
+  label         String
+  // URL we POST to — must be HTTPS in production
+  url           String
+  // Comma-separated event types: "track.created,track.updated"
+  events        String
+  // HMAC-SHA256 secret used to sign webhook payloads. We store the hash,
+  // reveal the raw secret to the user ONCE at creation.
+  secretHash    String
+  // 8-char prefix so user can identify which webhook in logs
+  secretPrefix  String
+  // Toggle without deleting
+  enabled       Boolean  @default(true)
+  // Skip TLS verification? Almost always false.
+  skipTls       Boolean  @default(false)
+  // Last delivery attempt
+  lastDeliveryAt   DateTime?
+  lastDeliveryStatus Int? // HTTP code from their server
+  lastDeliveryError String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@map("webhooks")
+}
+
+// -----------------------------------------------------------------------------
+// Webhook Delivery Log — append-only history of webhook deliveries
+// -----------------------------------------------------------------------------
+model WebhookDelivery {
+  id          BigInt   @id @default(autoincrement())
+  webhookId   String
+  userId      String
+  eventType   String
+  // Payload we sent (truncated to 64KB if larger)
+  payload     Json
+  // HTTP status from their server (null = network failure / timeout)
+  status      Int?
+  // Response body from their server (truncated to 4KB)
+  response    String?
+  // Duration from send to response in ms
+  durationMs  Int?
+  // Error message if delivery failed (timeout, DNS, connection refused)
+  error       String?
+  // Number of retry attempts (0 = first try, 4 = max)
+  attempt     Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([webhookId, createdAt])
+  @@index([userId, createdAt])
+  @@map("webhook_deliveries")
+}
+
+// -----------------------------------------------------------------------------
+// Developer Profile — per-user settings (name, company, billing ref)
+// Created lazily on first dashboard visit
+// -----------------------------------------------------------------------------
+model DeveloperProfile {
+  userId      String   @id // = auth.users.id
+  displayName String?
+  companyName String?
+  website     String?
+  // Optional internal support tier — set by Musicosy staff
+  tier        String   @default("free") // free | pro | enterprise
+  // Stripe customer id if monetized
+  stripeCustomerId String?
+  // Free-tier monthly request cap; null = unlimited
+  monthlyRequestCap Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("developer_profiles")
+}
+
+// -----------------------------------------------------------------------------
+// Audit Log — admin/security events (key created, key revoked, webhook added)
+// -----------------------------------------------------------------------------
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  userId     String
+  // e.g. "api_key.create", "api_key.revoke", "webhook.create"
+  action     String
+  // Polymorphic subject — e.g. {"apiKeyId": "ckxxx"}
+  subject    Json
+  // IP address of the actor
+  ip         String?
+  // User agent
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
 }

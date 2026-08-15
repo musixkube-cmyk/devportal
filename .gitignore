@@ -50,5 +50,17 @@ test
 prompt
 
 server.log
+
 # Skills directory
 /skills/
+
+# Supabase local
+/supabase/.branches
+/supabase/.env
+/supabase/.temp
+
+# Upload scratch area (may contain pasted creds/screenshots)
+/upload/
+
+# Cloned reference repos (private)
+/repos/
