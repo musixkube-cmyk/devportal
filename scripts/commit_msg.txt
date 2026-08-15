@@ -1,43 +1,42 @@
-refactor(dashboard): non-blocking client-shell pattern
+feat(api): consumer API gateway — /api/v1/* with sk_live_ bearer auth
 
-Replace the legacy "wait for DB then render HTML" dashboard architecture
-with the modern non-blocking pattern.
-
-BEFORE:
-- layout.tsx was a server component calling getCurrentUser() on every load
-- Each page was a server component doing parallel Supabase queries
-- Render phase blocked on DB round-trip, causing PrismaClientInitialization
-  errors when DATABASE_URL env was wrong
-- Usage / Webhooks pages were "Coming soon" stubs
-
-AFTER:
-- layout.tsx is a thin server component, ZERO DB calls
-- DashboardShell is a client component that mounts instantly (sidebar +
-  header + main container all present on first paint)
-- Each page is a client component using useFetch() + useEffect
-- Skeletons show while data loads (per-component, not full-page)
-- Module-level caches on useCurrentUser + useFetch give instant render
-  on navigation back to a page
+The "door to the vault" is now open. Users can create an sk_live_ key in
+the dashboard and immediately use it to call /api/v1/*.
 
 NEW:
-- /api/me - cheap cookie read for shell header email
-- /api/dashboard/stats - overview counts
-- /api/dashboard/usage - 30-day aggregates + top endpoints
-- /api/dashboard/webhooks (GET/POST) + /api/dashboard/webhooks/[id] (PATCH/DELETE)
-- src/hooks/dashboard/{useCurrentUser,useFetch}.ts
-- src/components/dashboard/DashboardShell.tsx
+- src/lib/api-gateway.ts — auth + audit + correlation-id layer
+  - extractBearerToken: parses `Authorization: Bearer sk_live_...`
+  - authenticateRequest: validates token via findApiKeyByRawSecret
+  - recordApiEvent: fire-and-forget write to api_key_events
+  - touchKeyUsage: fire-and-forget update of api_keys.lastUsedAt
+  - getRequestId: echoes client X-Request-Id or generates one
+  - gatewayError: standard { error: { code, message, details } } shape
 
-REAL IMPLEMENTATIONS (no more stubs):
-- /dashboard/usage: stat tiles + SVG sparkline + top endpoints + daily table
-- /dashboard/webhooks: full CRUD with create/reveal-once-secret/toggle/delete
-- /dashboard/settings: editable profile fields via supabase.auth.updateUser
+- src/app/api/v1/[...path]/route.ts — catch-all gateway
+  - Handles GET/POST/PUT/PATCH/DELETE via single gateway() function
+  - OPTIONS short-circuits with Allow header (CORS preflight)
+  - Special-cases /v1/_meta (discovery endpoint)
+  - Matches all 399 documented endpoints via api-reference catalogue
+  - Returns 501 NotImplemented for documented-but-not-implemented
+  - Returns 404 for unknown paths, 405 for wrong method
+  - Every authenticated request gets audit log + lastUsedAt touch
+  - X-Request-Id + X-Musicosy-Version headers on every response
 
-Render times (warm, server-side, just JSX serialization):
-  /dashboard         38ms
-  /dashboard/keys    77ms
-  /dashboard/usage   60ms
-  /dashboard/webhooks 51ms
-  /dashboard/settings 62ms
+RESPONSE CODES:
+  200 — handler succeeded (only /v1/_meta today)
+  401 — missing/invalid API key
+  404 — endpoint not in catalogue
+  405 — method not allowed for this path
+  501 — documented but not yet implemented
 
-All under 100ms. Middleware JWT refresh (~250-430ms at the edge) is the
-only remaining latency, and it does not block rendering.
+FRONTEND AUDIT (no changes needed):
+  All 5 dashboard pages are "use client" with useEffect data fetching.
+  Layout is a thin server component with ZERO DB calls.
+  HTML response contains zero inline user data.
+  Render times: 38-77ms warm.
+
+End-to-end verified:
+  - Valid key + documented endpoint -> 501 with endpoint metadata
+  - Audit events written to api_key_events (11 rows verified)
+  - api_keys.lastUsedAt updated on every authenticated request
+  - X-Request-Id preserved from client or auto-generated
