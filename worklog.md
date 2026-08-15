@@ -74,3 +74,46 @@ Stage Summary:
 - All "Coming soon" stubs replaced with real implementations (usage sparkline + table, webhooks full CRUD, settings editable profile).
 - Module-level caches on useCurrentUser and useFetch give instant render on navigation back to a page (no refetch, no loading flash).
 - Auth gating unchanged: middleware redirects to /signin if no session, so the client shell never mounts for unauthenticated users.
+
+---
+Task ID: consumer-api-gateway
+Agent: main
+Task: Build /api/v1/* consumer API gateway — the "door to the vault"
+
+Work Log:
+- Verified frontend architecture is already non-blocking: all 5 dashboard pages are "use client", layout.tsx is a thin server component with ZERO DB calls, HTML response contains zero inline user data, render times 38-77ms warm. No frontend changes needed.
+- Built src/lib/api-gateway.ts — auth + audit + correlation-id layer:
+  - extractBearerToken() — parses `Authorization: Bearer sk_live_...` (also accepts bare token for dev convenience)
+  - authenticateRequest() — validates token format, looks up via findApiKeyByRawSecret(), returns 401 with stable error codes (missing_authorization, invalid_authorization, invalid_api_key)
+  - recordApiEvent() — fire-and-forget write to api_key_events table (method, path, status, durationMs, requestId). Failures swallowed so audit outages can't break user requests.
+  - touchKeyUsage() — fire-and-forget update of api_keys.lastUsedAt + lastUsedIp
+  - getRequestId() — echoes client-supplied X-Request-Id (validated) or generates a 16-char hex id
+  - gatewayError() — standard JSON error shape { error: { code, message, details } }
+- Built src/app/api/v1/[...path]/route.ts — catch-all gateway:
+  - Handles GET/POST/PUT/PATCH/DELETE via single `gateway()` function
+  - OPTIONS short-circuits with Allow header (no auth needed for CORS preflight)
+  - Special-cases /v1/_meta (discovery endpoint) — returns gateway metadata, auth schemes, rate limit policy, endpoint counts (documented vs live vs notImplemented)
+  - For all other paths: looks up endpoint in the api-reference catalogue (399 endpoints across 27 domains) using matchPath() with {param} placeholder support
+  - Returns 501 NotImplemented for documented-but-not-implemented endpoints (with full endpoint metadata in the response so users know it exists)
+  - Returns 404 for unknown paths
+  - Returns 405 for wrong method on a documented path
+  - Empty HANDLERS map by design — handlers will be registered as endpoints are implemented in later phases
+  - Every authenticated request gets: X-Request-Id + X-Musicosy-Version response headers, audit log row, lastUsedAt touch
+- Built scripts/check-audit-events.mjs — verification script that queries api_key_events via the pg pool directly (works around Prisma's prepared statement issue with Supabase's transaction-mode pooler)
+
+End-to-end test results (all passing):
+  - Missing Authorization header → 401 missing_authorization
+  - Malformed token (no sk_live_ prefix) → 401 invalid_authorization
+  - Valid key + documented endpoint → 501 not_implemented (with endpoint metadata)
+  - Valid key + unknown path → 404 not_found
+  - Valid key + /v1/_meta → 200 with gateway metadata (399 documented, 0 live, 399 not implemented)
+  - POST to documented endpoint → 501 not_implemented
+  - X-Request-Id header echoed on every response
+  - Custom X-Request-Id from client preserved
+  - Audit events written to api_key_events table (verified 11 rows with correct method/path/status/duration/requestId)
+  - api_keys.lastUsedAt + lastUsedIp updated on every authenticated request
+
+Stage Summary:
+- The "door to the vault" is open. Users can now create an sk_live_ key in the dashboard and immediately use it to call /api/v1/* — they get clean 401/404/405/501 responses with stable error codes and correlation IDs, and every call is audited.
+- The gateway is forward-compatible: implementing a real endpoint is just a matter of adding a handler to the HANDLERS map. The auth/audit/routing/correlation-id infrastructure is all in place.
+- 399 endpoints are documented; 0 are implemented. The /v1/_meta endpoint tells clients exactly which is which.
