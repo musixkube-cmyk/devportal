@@ -4,24 +4,21 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { Mail, ArrowRight } from "lucide-react";
 
 /**
- * Musicosy sign-in / sign-up.
+ * Musicosy sign-in.
  *
- * Auth options, in order of availability:
- *  1. Phone (OTP — requires SMS provider configured in Supabase)
- *  2. Email magic link (OTP — works out-of-box, just needs SMTP which Supabase provides)
- *  3. Google / Apple (OAuth — requires enabling each provider in Supabase dashboard)
- *  4. Email + password (sign-in OR sign-up — auto-fallback between the two)
+ * Behavior (per spec):
+ *  - User enters email → password → submits
+ *  - If the email exists in Supabase, sign in with the password
+ *  - If the email does NOT exist, sign up automatically and continue
+ *  - On success, redirect to `next` (defaults to /dashboard)
  *
- * The email+password form has a mode toggle. When the user submits and the
- * server rejects with "Invalid login credentials" (sign-in mode) or "User
- * already registered" (sign-up mode), we automatically try the opposite flow
- * — this implements the "check if email exists, then sign up if not" UX.
+ * Phone / Google / Apple buttons match the reference design from
+ * landing-home. They will show Supabase's native error if a provider
+ * isn't enabled — no custom handling, no extra UI added.
  *
- * `next` query param: where to send the user after auth. Defaults to /dashboard.
- * Set by middleware when redirecting an unauthenticated /dashboard/* request.
+ * `next` query param is set by middleware when redirecting from /dashboard/*.
  */
 export default function SignInPage() {
   const router = useRouter();
@@ -31,20 +28,14 @@ export default function SignInPage() {
   const supabase = createBrowserClient();
   const [pending, startTransition] = useTransition();
 
-  // Mode toggle: "signin" tries signInWithPassword, "signup" tries signUp
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [showPhone, setShowPhone] = useState(false);
-  const [showMagicLink, setShowMagicLink] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   function finish() {
     startTransition(() => {
@@ -56,7 +47,6 @@ export default function SignInPage() {
   // --- Phone OTP ---
   async function sendOtp() {
     setError(null);
-    setInfo(null);
     const { error } = await supabase.auth.signInWithOtp({
       phone: phone.trim(),
       options: { shouldCreateUser: true },
@@ -66,7 +56,6 @@ export default function SignInPage() {
       return;
     }
     setOtpSent(true);
-    setInfo("Code sent. Check your phone.");
   }
 
   async function verifyOtp() {
@@ -83,142 +72,65 @@ export default function SignInPage() {
     finish();
   }
 
-  // --- Email magic link (OTP via email — no OAuth config needed) ---
-  async function sendMagicLink() {
-    setError(null);
-    setInfo(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setMagicLinkSent(true);
-    setInfo(`Magic link sent to ${email.trim()}. Click the link in the email to continue.`);
-  }
-
   // --- OAuth ---
   async function oauth(provider: "google" | "apple") {
     setError(null);
-    setInfo(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
-    if (error) {
-      // Provider not enabled in Supabase dashboard — give a clearer hint
-      if (error.message.includes("provider is not enabled") || error.message.includes("Unsupported provider")) {
-        setError(
-          `${provider === "google" ? "Google" : "Apple"} sign-in is not enabled. ` +
-          `Enable it in Supabase Dashboard → Authentication → Providers, ` +
-          `or use email magic link below.`,
-        );
-      } else {
-        setError(error.message);
-      }
-    }
+    if (error) setError(error.message);
   }
 
-  // --- Email + password (sign-in OR sign-up, with auto-fallback) ---
-  async function submitEmailPassword() {
+  // --- Email + password (sign-in, with auto sign-up fallback) ---
+  async function signInWithEmail() {
     setError(null);
-    setInfo(null);
 
-    if (mode === "signin") {
-      // 1) Try sign-in
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      if (!error) {
-        finish();
-        return;
-      }
-      // 2) If "Invalid login credentials", the user may not exist yet — try sign-up
-      if (
-        error.message.toLowerCase().includes("invalid login credentials") ||
-        error.code === "invalid_credentials"
-      ) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-          },
-        });
-        if (signUpError) {
-          setError(signUpError.message);
-          return;
-        }
-        // 3) If email confirmation is OFF, signUp returns a session — done.
-        if (signUpData.session) {
-          finish();
-          return;
-        }
-        // 4) Email confirmation is ON — tell user to check inbox
-        setInfo(
-          `Account created. We sent a confirmation link to ${email.trim()} — ` +
-          `click it to verify your email, then sign in. ` +
-          `(To skip this step in dev, disable "Confirm email" in Supabase Dashboard → Authentication → Providers.)`,
-        );
-        return;
-      }
-      // Other sign-in error (rate limit, etc.)
-      setError(error.message);
-      return;
-    }
-
-    // mode === "signup"
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    // 1) Try sign-in
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
     });
-    if (signUpError) {
-      // If user already exists, fall back to sign-in
-      if (
-        signUpError.message.toLowerCase().includes("already been registered") ||
-        signUpError.message.toLowerCase().includes("already registered") ||
-        signUpError.code === "user_already_exists"
-      ) {
-        const { data: signInData, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
-        if (signInError) {
-          setError(
-            `An account with this email already exists, but the password didn't match. ` +
-            `Try signing in with the correct password, or use "Sign in" mode.`,
-          );
-          return;
-        }
-        finish();
-        return;
-      }
-      setError(signUpError.message);
-      return;
-    }
-    // Email confirmation off → session present → done
-    if (signUpData.session) {
+
+    if (!error) {
       finish();
       return;
     }
-    // Email confirmation on → show message
-    setInfo(
-      `Account created. We sent a confirmation link to ${email.trim()} — ` +
-      `click it to verify your email, then sign in. ` +
-      `(To skip this step in dev, disable "Confirm email" in Supabase Dashboard → Authentication → Providers.)`,
-    );
+
+    // 2) If credentials are invalid, the account may not exist yet — sign up
+    if (
+      error.message.toLowerCase().includes("invalid login credentials") ||
+      error.code === "invalid_credentials"
+    ) {
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+      // 3) If email confirmation is off, signUp returns a session — done
+      if (signUpData.session) {
+        finish();
+        return;
+      }
+      // 4) Email confirmation is on — Supabase requires verification before login
+      setError(
+        `Account created. Check your inbox at ${email.trim()} for a confirmation link, ` +
+        `then sign in. (To disable this requirement in dev: Supabase Dashboard → ` +
+        `Authentication → Sign In / Up → turn off "Confirm email".)`,
+      );
+      return;
+    }
+
+    // Other sign-in error (rate limit, etc.)
+    setError(error.message);
   }
 
   return (
@@ -233,7 +145,7 @@ export default function SignInPage() {
       </div>
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-16 px-6 py-14 md:px-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-24 lg:py-24">
-        {/* Left: oversized Musicosy logo */}
+        {/* Left: logo */}
         <div className="flex items-center justify-start">
           <img
             src="/musicosy-logo.png"
@@ -244,29 +156,6 @@ export default function SignInPage() {
 
         {/* Right: auth panel */}
         <div className="w-full max-w-md justify-self-center lg:justify-self-end">
-          {/* Mode toggle */}
-          <div className="mb-4 grid grid-cols-2 gap-1 border border-border p-1">
-            {(["signin", "signup"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setError(null);
-                  setInfo(null);
-                }}
-                className={`h-9 text-xs font-medium transition-colors ${
-                  mode === m
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {m === "signin" ? "Sign in" : "Create account"}
-              </button>
-            ))}
-          </div>
-
-          {/* Phone */}
           <button
             type="button"
             disabled={pending}
@@ -276,6 +165,7 @@ export default function SignInPage() {
             <PhoneIcon /> Continue with phone
           </button>
 
+          {/* Phone input — slow reveal */}
           <div
             className={`grid transition-all duration-500 ease-in-out ${
               showPhone ? "mt-3 max-h-80 opacity-100" : "mt-0 max-h-0 opacity-0"
@@ -324,48 +214,6 @@ export default function SignInPage() {
             )}
           </div>
 
-          {/* Email magic link */}
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => setShowMagicLink(!showMagicLink)}
-            className="mt-3 flex h-14 w-full items-center justify-center gap-3 rounded-full border border-foreground bg-background font-medium text-foreground transition-colors hover:bg-surface disabled:opacity-50"
-          >
-            <Mail className="size-4" /> Continue with email link
-          </button>
-
-          <div
-            className={`grid transition-all duration-500 ease-in-out ${
-              showMagicLink ? "mt-3 max-h-80 opacity-100" : "mt-0 max-h-0 opacity-0"
-            }`}
-            style={{ overflow: showMagicLink ? "visible" : "hidden" }}
-          >
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
-            />
-            {!magicLinkSent ? (
-              <button
-                type="button"
-                disabled={!email.trim() || pending}
-                onClick={sendMagicLink}
-                className={`mt-2 flex h-12 items-center justify-center gap-2 rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
-                  !email.trim() ? "pointer-events-none opacity-40" : ""
-                }`}
-              >
-                Send magic link <ArrowRight className="size-4" />
-              </button>
-            ) : (
-              <p className="mt-2 rounded-md border border-foreground/30 bg-surface px-3 py-2 text-xs text-foreground">
-                Link sent. Check your inbox and click the link to sign in.
-              </p>
-            )}
-          </div>
-
-          {/* OAuth — kept, but will error clearly if not enabled */}
           <button
             type="button"
             disabled={pending}
@@ -390,17 +238,17 @@ export default function SignInPage() {
             <span className="h-px flex-1 bg-border" />
           </div>
 
-          {/* Email + password */}
+          {/* Email input */}
           <div>
             <label htmlFor="identifier" className="sr-only">
-              Email
+              Email or username
             </label>
             <input
               id="identifier"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
+              placeholder="Email or username"
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
@@ -415,6 +263,7 @@ export default function SignInPage() {
             </button>
           </div>
 
+          {/* Password — slow reveal after email Continue */}
           <div
             className={`grid transition-all duration-500 ease-in-out ${
               showPassword ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
@@ -429,29 +278,24 @@ export default function SignInPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password (min 6 characters)"
+              placeholder="Password"
               className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
             <button
               type="button"
-              disabled={!password.trim() || password.trim().length < 6 || pending}
-              onClick={submitEmailPassword}
+              disabled={!password.trim() || pending}
+              onClick={signInWithEmail}
               className={`mt-3 flex h-14 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
-                !password.trim() || password.trim().length < 6 ? "pointer-events-none opacity-40" : ""
+                !password.trim() ? "pointer-events-none opacity-40" : ""
               }`}
             >
-              {mode === "signin" ? "Sign in" : "Create account"}
+              Sign in
             </button>
           </div>
 
           {error && (
             <p className="mt-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
               {error}
-            </p>
-          )}
-          {info && (
-            <p className="mt-4 rounded-md border border-foreground/30 bg-surface px-3 py-2 text-xs leading-relaxed text-foreground">
-              {info}
             </p>
           )}
 
