@@ -106,9 +106,7 @@ export default function SignInPage() {
     }
     // Email confirmation is on — Supabase requires verification before login
     setError(
-      `Account created. Check your inbox at ${email.trim()} for a confirmation link, ` +
-      `then sign in. (To disable this requirement in dev: Supabase Dashboard → ` +
-      `Authentication → Sign In / Up → turn off "Confirm email".)`,
+      `We sent a confirmation link to ${email.trim()}. Open the email and click the link to verify your account, then sign in.`,
     );
   }
 
