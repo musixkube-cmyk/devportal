@@ -7,12 +7,8 @@ import { generateApiKey } from "@/lib/api-keys";
  * POST /api/dashboard/keys/[id]/roll
  *
  * Generates a new secret for an existing key, updates the row with the new
- * hash + prefix + lastFour, and returns the new raw secret. The old secret
- * stops working immediately.
- *
- * Use case: key compromise, rotation policy, or user lost the secret string.
- *
- * RLS scopes every query to the current user.
+ * key_hash + prefix + last_four, and returns the new raw secret. The old
+ * secret stops working immediately.
  */
 export async function POST(
   request: NextRequest,
@@ -27,13 +23,13 @@ export async function POST(
 
   const { data: key, error: findErr } = await supabase
     .from("api_keys")
-    .select("id, label, revokedAt")
+    .select("id, name, label, revoked")
     .eq("id", id)
     .maybeSingle();
 
   if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
   if (!key) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (key.revokedAt) {
+  if (key.revoked) {
     return NextResponse.json({ error: "cannot roll a revoked key" }, { status: 400 });
   }
 
@@ -41,10 +37,10 @@ export async function POST(
 
   const { error: updateErr } = await supabase
     .from("api_keys")
-    .update({ hashedKey, prefix, lastFour })
+    .update({ key_hash: hashedKey, prefix, last_four: lastFour })
     .eq("id", id);
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-  return NextResponse.json({ id, label: key.label, rawSecret });
+  return NextResponse.json({ id, label: key.label ?? key.name, rawSecret });
 }

@@ -165,8 +165,8 @@ export function recordApiEvent(params: {
       const { pgPool } = await import("@/lib/pg");
       await pgPool.query(
         `INSERT INTO api_key_events
-           ("apiKeyId", "userId", method, path, status, "durationMs",
-            "bytesIn", "bytesOut", "errorCode", "requestId")
+           (api_key_id, user_id, method, path, status, duration_ms,
+            bytes_in, bytes_out, error_code, request_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           params.apiKeyId,
@@ -205,8 +205,8 @@ export function touchKeyUsage(params: {
       const { pgPool } = await import("@/lib/pg");
       await pgPool.query(
         `UPDATE api_keys
-         SET "lastUsedAt" = now(),
-             "lastUsedIp" = $2
+         SET last_used = now(),
+             last_used_ip = $2
          WHERE id = $1`,
         [params.apiKeyId, params.ip],
       );

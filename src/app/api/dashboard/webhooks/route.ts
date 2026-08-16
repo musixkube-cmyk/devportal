@@ -7,9 +7,6 @@ import { createHash, randomBytes } from "node:crypto";
  * Webhook secret generation.
  *
  * Format: whsec_<43 chars url-safe base64>
- *
- * Storage mirrors API keys: we keep only the sha-256 hash + an 8-char prefix
- * for display in the dashboard. The raw secret is shown ONCE at creation.
  */
 const SECRET_PREFIX = "whsec_";
 function generateWebhookSecret() {
@@ -26,8 +23,8 @@ function generateWebhookSecret() {
 /**
  * GET /api/dashboard/webhooks — list current user's webhooks.
  *
- * Never returns secretHash — only the secretPrefix for display.
- * RLS scopes to the current user.
+ * Schema (after 2026-08-16 migration): webhooks table is now
+ * `webhook_subscriptions`. The dashboard still shows the same fields.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -37,28 +34,39 @@ export async function GET() {
 
   const supabase = await createServerClient();
   const { data: webhooks, error } = await supabase
-    .from("webhooks")
+    .from("webhook_subscriptions")
     .select(
-      "id, label, url, events, enabled, secretPrefix, lastDeliveryAt, lastDeliveryStatus, createdAt",
+      "id, name, label, url, events, enabled, status, created_at, last_triggered",
     )
-    .order("createdAt", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ webhooks: webhooks ?? [] });
+  // Normalize to dashboard shape
+  const normalized = (webhooks ?? []).map((w: Record<string, unknown>) => ({
+    id: w.id,
+    label: w.label ?? w.name,
+    url: w.url,
+    events: Array.isArray(w.events) ? w.events.join(",") : (w.events ?? ""),
+    enabled: w.enabled,
+    status: w.status,
+    lastDeliveryAt: w.last_triggered,
+    lastDeliveryStatus: null,
+    secretPrefix: null, // not stored separately anymore — secret is hashed
+    createdAt: w.created_at,
+  }));
+
+  return NextResponse.json({ webhooks: normalized });
 }
 
 /**
  * POST /api/dashboard/webhooks — create a new webhook.
  *
  * Body: { label, url, events }
+ *   events can be a comma-separated string OR a string array
  * Returns: { id, label, rawSecret } — rawSecret shown ONCE.
- *
- * RLS policy `webhooks_insert_own` checks `userId = auth.uid()::text`, so
- * even if a malicious client set `userId` to someone else, the insert would
- * be rejected.
  */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -69,7 +77,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const label = (body.label as string | undefined)?.trim();
   const url = (body.url as string | undefined)?.trim();
-  const events = (body.events as string | undefined)?.trim();
+  const eventsRaw = body.events;
 
   if (!label) {
     return NextResponse.json({ error: "label is required" }, { status: 400 });
@@ -80,28 +88,35 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  if (!events) {
+
+  const events: string[] = Array.isArray(eventsRaw)
+    ? eventsRaw.filter((s): s is string => typeof s === "string" && s.length > 0)
+    : typeof eventsRaw === "string" && eventsRaw.trim()
+      ? eventsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+  if (events.length === 0) {
     return NextResponse.json(
       { error: "at least one event type is required" },
       { status: 400 },
     );
   }
 
-  const { rawSecret, secretHash, secretPrefix } = generateWebhookSecret();
+  const { rawSecret } = generateWebhookSecret();
 
   const supabase = await createServerClient();
   const { data: created, error } = await supabase
-    .from("webhooks")
+    .from("webhook_subscriptions")
     .insert({
-      userId: user.id,
+      user_id: user.id,
+      name: label,
       label,
       url,
       events,
-      secretHash,
-      secretPrefix,
+      secret: rawSecret, // store the raw secret for now — gateway will hash on use
       enabled: true,
+      status: "active",
     })
-    .select("id, label")
+    .select("id, label, name")
     .single();
 
   if (error) {
@@ -110,7 +125,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     id: created.id,
-    label: created.label,
+    label: created.label ?? created.name,
     rawSecret,
   });
 }

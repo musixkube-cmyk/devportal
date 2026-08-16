@@ -41,7 +41,16 @@ export function hashApiKey(rawSecret: string): string {
 
 /**
  * Looks up an API key by hashing the incoming secret and matching against
- * `hashedKey`. Returns the key row (without the hash) or null.
+ * `api_keys.key_hash`. Returns the key row (without the hash) or null.
+ *
+ * Schema (after the full-schema-migration, 2026-08-16):
+ *   api_keys (
+ *     id, organization_id, user_id, name, label,
+ *     key_hash, prefix, last_four, scopes TEXT[],
+ *     last_used, last_used_ip, expires_at,
+ *     revoked BOOLEAN, revoked_at,
+ *     created_at, updated_at
+ *   )
  *
  * Uses the direct pg pool instead of Prisma to avoid the "prepared statement
  * already exists" error that occurs with Supabase's transaction-mode pooler.
@@ -51,29 +60,30 @@ export async function findApiKeyByRawSecret(rawSecret: string) {
   const hashedKey = hashApiKey(rawSecret);
   const result = await pgPool.query<{
     id: string;
-    user_id: string;
-    label: string;
-    scopes: string;
-    revoked_at: Date | null;
+    user_id: string | null;
+    organization_id: string | null;
+    label: string | null;
+    name: string;
+    scopes: string[] | null;
+    revoked: boolean;
     expires_at: Date | null;
   }>(
-    `SELECT id, "userId" AS user_id, label, scopes,
-            "revokedAt" AS revoked_at, "expiresAt" AS expires_at
+    `SELECT id, user_id, organization_id, label, name, scopes, revoked, expires_at
      FROM api_keys
-     WHERE "hashedKey" = $1
+     WHERE key_hash = $1
      LIMIT 1`,
     [hashedKey],
   );
   const row = result.rows[0];
   if (!row) return null;
-  if (row.revoked_at) return null;
+  if (row.revoked) return null;
   if (row.expires_at && row.expires_at.getTime() < Date.now()) return null;
   return {
     id: row.id,
-    userId: row.user_id,
-    label: row.label,
-    scopes: row.scopes,
-    revokedAt: row.revoked_at,
+    userId: row.user_id ?? row.organization_id ?? row.name,
+    label: row.label ?? row.name,
+    scopes: Array.isArray(row.scopes) ? row.scopes.join(",") : (row.scopes ?? ""),
+    revokedAt: row.revoked ? new Date() : null,
     expiresAt: row.expires_at,
   };
 }

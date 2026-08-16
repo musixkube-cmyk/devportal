@@ -5,19 +5,10 @@ import { createServerClient } from "@/lib/supabase/server";
 /**
  * GET /api/dashboard/stats — overview numbers for the dashboard home page.
  *
- * Returns:
- *   - totalKeys: count of all the user's API keys (incl. revoked)
- *   - activeKeys: count of non-revoked keys
- *   - revokedKeys: count of revoked keys
- *   - webhookCount: count of the user's webhooks
- *   - requestsToday: sum of requestCount across today's usage_daily rows
- *   - requests30d: sum of requestCount across last 30 days
- *
- * RLS scopes every query to the current user — no `WHERE userId = ...`
- * needed.
- *
- * Called client-side on dashboard mount (non-blocking — the shell is
- * already on screen).
+ * Schema (after 2026-08-16 migration):
+ *   - api_keys.revoked is BOOLEAN (not revoked_at timestamp)
+ *   - webhooks table is now webhook_subscriptions
+ *   - usage_daily columns are snake_case (request_count, error_count)
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -27,8 +18,6 @@ export async function GET() {
 
   const supabase = await createServerClient();
 
-  // Fire all count queries in parallel — Supabase handles them as separate
-  // Postgres queries, but they share one HTTP/2 connection.
   const [
     { count: totalKeys },
     { count: activeKeys },
@@ -39,37 +28,36 @@ export async function GET() {
     supabase
       .from("api_keys")
       .select("*", { count: "exact", head: true })
-      .is("revokedAt", null),
+      .eq("revoked", false),
     supabase
       .from("api_keys")
       .select("*", { count: "exact", head: true })
-      .not("revokedAt", "is", null),
-    supabase.from("webhooks").select("*", { count: "exact", head: true }),
+      .eq("revoked", true),
+    supabase.from("webhook_subscriptions").select("*", { count: "exact", head: true }),
   ]);
 
-  // Usage stats — sum of requestCount over the last 30 days. We select
-  // individual rows so we can sum client-side AND also compute "today".
-  // For very heavy users this would be paginated; for now we cap at 30
-  // rows (one per day per active key) which is small.
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
   thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
 
   const { data: usageRows } = await supabase
     .from("usage_daily")
-    .select("day, requestCount")
-    .gte("day", thirtyDaysAgo.toISOString());
+    .select("day, request_count")
+    .gte("day", thirtyDaysAgo.toISOString().slice(0, 10));
 
   const todayUTC = new Date();
   todayUTC.setUTCHours(0, 0, 0, 0);
+  const todayKey = todayUTC.toISOString().slice(0, 10);
 
   let requestsToday = 0;
   let requests30d = 0;
   if (usageRows) {
     for (const r of usageRows) {
-      requests30d += r.requestCount ?? 0;
-      if (new Date(r.day).getTime() >= todayUTC.getTime()) {
-        requestsToday += r.requestCount ?? 0;
+      const cnt = r.request_count ?? 0;
+      requests30d += cnt;
+      const dayStr = typeof r.day === "string" ? r.day.slice(0, 10) : String(r.day).slice(0, 10);
+      if (dayStr >= todayKey) {
+        requestsToday += cnt;
       }
     }
   }

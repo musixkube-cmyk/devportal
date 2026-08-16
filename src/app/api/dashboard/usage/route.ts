@@ -3,18 +3,11 @@ import { getCurrentUser } from "@/lib/session";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
- * GET /api/dashboard/usage — last 30 days of per-day usage aggregates for
- * the current user.
+ * GET /api/dashboard/usage — last 30 days of per-day usage aggregates.
  *
- * Returns:
- *   rows: { day, requestCount, errorCount, p50Ms, p99Ms, topEndpoint }[]
- *   totalRequests: number
- *   totalErrors: number
- *   avgP50: number (mean across days with >0 requests)
- *   avgP99: number
- *   topEndpoints: { endpoint, count }[] (top 10 across the 30d window)
- *
- * RLS scopes queries to the current user.
+ * Schema (after 2026-08-16 migration): usage_daily columns are snake_case
+ *   (day, request_count, error_count, p50_ms, p95_ms, p99_ms)
+ *   NO top_endpoint column — derived separately from api_key_events.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -31,9 +24,9 @@ export async function GET() {
   const { data: rows, error } = await supabase
     .from("usage_daily")
     .select(
-      "day, requestCount, errorCount, p50Ms, p99Ms, topEndpoint",
+      "day, request_count, error_count, p50_ms, p95_ms, p99_ms",
     )
-    .gte("day", thirtyDaysAgo.toISOString())
+    .gte("day", thirtyDaysAgo.toISOString().slice(0, 10))
     .order("day", { ascending: true });
 
   if (error) {
@@ -42,8 +35,6 @@ export async function GET() {
 
   const list = rows ?? [];
 
-  // Aggregate per-day rows into a single day-bucket (multiple keys can
-  // contribute to the same calendar day).
   const byDay = new Map<
     string,
     {
@@ -55,10 +46,10 @@ export async function GET() {
       topEndpoint: string | null;
     }
   >();
-  const endpointCounts = new Map<string, number>();
 
   for (const r of list) {
-    const dayKey = String(r.day).slice(0, 10);
+    const rawDay = r.day;
+    const dayKey = typeof rawDay === "string" ? rawDay.slice(0, 10) : String(rawDay).slice(0, 10);
     const entry = byDay.get(dayKey) ?? {
       day: dayKey,
       requestCount: 0,
@@ -67,17 +58,10 @@ export async function GET() {
       p99Max: 0,
       topEndpoint: null,
     };
-    entry.requestCount += r.requestCount ?? 0;
-    entry.errorCount += r.errorCount ?? 0;
-    entry.p50Max = Math.max(entry.p50Max, r.p50Ms ?? 0);
-    entry.p99Max = Math.max(entry.p99Max, r.p99Ms ?? 0);
-    if (r.topEndpoint) {
-      entry.topEndpoint = r.topEndpoint;
-      endpointCounts.set(
-        r.topEndpoint,
-        (endpointCounts.get(r.topEndpoint) ?? 0) + (r.requestCount ?? 0),
-      );
-    }
+    entry.requestCount += r.request_count ?? 0;
+    entry.errorCount += r.error_count ?? 0;
+    entry.p50Max = Math.max(entry.p50Max, r.p50_ms ?? 0);
+    entry.p99Max = Math.max(entry.p99Max, r.p99_ms ?? 0);
     byDay.set(dayKey, entry);
   }
 
@@ -98,6 +82,19 @@ export async function GET() {
       )
     : 0;
 
+  // Top endpoints — derive from api_key_events for the last 30 days
+  const { data: eventRows } = await supabase
+    .from("api_key_events")
+    .select("path")
+    .gte("created_at", thirtyDaysAgo.toISOString());
+
+  const endpointCounts = new Map<string, number>();
+  if (eventRows) {
+    for (const e of eventRows) {
+      const p = e.path ?? "unknown";
+      endpointCounts.set(p, (endpointCounts.get(p) ?? 0) + 1);
+    }
+  }
   const topEndpoints = Array.from(endpointCounts.entries())
     .map(([endpoint, count]) => ({ endpoint, count }))
     .sort((a, b) => b.count - a.count)

@@ -6,7 +6,13 @@ import { hashApiKey, generateApiKey } from "@/lib/api-keys";
 /**
  * GET /api/dashboard/keys — list current user's API keys (no raw secrets)
  *
- * RLS scopes the query to the current user — no `WHERE userId = ...` needed.
+ * Schema (after 2026-08-16 migration):
+ *   api_keys (id, organization_id, user_id, name, label, key_hash, prefix,
+ *             last_four, scopes TEXT[], last_used, last_used_ip, expires_at,
+ *             revoked BOOLEAN, revoked_at, created_at, updated_at)
+ *
+ * The dashboard uses the user's Supabase session (RLS-protected) so the
+ * query is automatically scoped to rows where user_id = auth.uid().
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -16,26 +22,36 @@ export async function GET() {
   const { data: keys, error } = await supabase
     .from("api_keys")
     .select(
-      "id, label, prefix, lastFour, scopes, revokedAt, expiresAt, lastUsedAt, createdAt",
+      "id, name, label, prefix, last_four, scopes, revoked, revoked_at, expires_at, last_used, created_at",
     )
-    .order("createdAt", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ keys: keys ?? [] });
+  // Normalize to the shape the dashboard UI expects (camelCase + flat scopes string)
+  const normalized = (keys ?? []).map((k: Record<string, unknown>) => ({
+    id: k.id,
+    label: k.label ?? k.name,
+    prefix: k.prefix,
+    lastFour: k.last_four,
+    scopes: Array.isArray(k.scopes) ? k.scopes.join(",") : (k.scopes ?? ""),
+    revoked: k.revoked,
+    revokedAt: k.revoked_at,
+    expiresAt: k.expires_at,
+    lastUsedAt: k.last_used,
+    createdAt: k.created_at,
+  }));
+
+  return NextResponse.json({ keys: normalized });
 }
 
 /**
  * POST /api/dashboard/keys — create a new API key
- * Body: { label: string, scopes?: string, expiresAt?: string | null }
+ * Body: { label: string, scopes?: string | string[], expiresAt?: string | null }
  *
  * Returns the raw secret ONCE. Client must store it; we never persist it.
- *
- * RLS policy `api_keys_insert_own` checks `userId = auth.uid()::text`, so
- * even if a malicious client tried to set `userId` to someone else, the
- * insert would be rejected.
  */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -43,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const label = (body.label as string | undefined)?.trim();
-  const scopes = (body.scopes as string | undefined)?.trim() || "read:all,write:all";
+  const scopesRaw = body.scopes;
   const expiresAt = body.expiresAt ? new Date(body.expiresAt as string) : null;
 
   if (!label) {
@@ -53,41 +69,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "expiresAt is not a valid ISO date" }, { status: 400 });
   }
 
+  // Normalize scopes to an array of strings
+  const scopes: string[] = Array.isArray(scopesRaw)
+    ? scopesRaw.filter((s): s is string => typeof s === "string" && s.length > 0)
+    : typeof scopesRaw === "string" && scopesRaw.trim()
+      ? scopesRaw.split(",").map((s) => s.trim()).filter(Boolean)
+      : ["catalog_read", "catalog_write", "analytics_read"];
+
   // Generate the raw secret + its hash + display prefix/last4
   const { rawSecret, hashedKey, prefix, lastFour } = generateApiKey();
 
   const supabase = await createServerClient();
 
-  // Insert — RLS will verify userId matches auth.uid()
   const { data: created, error } = await supabase
     .from("api_keys")
     .insert({
-      userId: user.id,
+      user_id: user.id,
+      name: label,
       label,
-      hashedKey,
+      key_hash: hashedKey,
       prefix,
-      lastFour,
+      last_four: lastFour,
       scopes,
-      expiresAt: expiresAt?.toISOString() ?? null,
+      expires_at: expiresAt?.toISOString() ?? null,
+      revoked: false,
     })
-    .select("id, label")
+    .select("id, label, name")
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Audit log — best effort, don't fail the request if this fails.
-  // Uses admin client (service_role bypasses RLS) so we can INSERT into
-  // audit_logs which has no INSERT policy for authenticated users.
-  // Skipping the admin client for now to avoid the service_role key issue;
-  // audit logging will be re-enabled when the real service_role key is
-  // provisioned.
-
-  // Return the raw secret — this is the ONLY time it leaves the server.
   return NextResponse.json({
     id: created.id,
-    label: created.label,
+    label: created.label ?? created.name,
     rawSecret, // the full `sk_live_<random>` — client must store
   });
 }
