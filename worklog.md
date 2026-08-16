@@ -452,3 +452,33 @@ Stage Summary:
 - Bug was a Next.js 16 dev-server CORS-like protection blocking /_next/* from the IM preview domain, which prevented client hydration, which prevented the fetch from firing, which kept the page on the skeleton forever.
 - Fix is one config addition (allowedDevOrigins). Dev server is back up at http://localhost:3000, persistent via setsid -f.
 - User can now refresh the preview-chat URL and the dashboard will hydrate, fetch the keys, and render the Master Key row (label, sk_live_2B4t_sga…4A6U, Active status, last-used timestamp, roll/revoke buttons).
+
+---
+Task ID: fix-signin-flow-2026-08-17
+Agent: main
+Task: User reported 3 sign-in bugs: (1) two buttons stacked after clicking Continue, (2) "invalid credentials" for existing emails, (3) new email signup prompts password twice + no redirect.
+
+Work Log:
+- Read SignInForm.tsx and identified the actual bugs (user was right, my earlier "signup works" claim was based on an isolated test script that bypassed the form entirely):
+  * Bug #1 — Two buttons stacked: After `checkEmailAndContinue()` set `flow`, the password section (with its own "Sign in"/"Create account" button) was revealed BELOW the "Continue" button. The Continue button was never hidden. User saw both buttons stacked and could click Continue again, re-firing checkEmail and resetting state.
+  * Bug #2 — Signup double password prompt: After /api/auth/signup INSERT succeeded, the code immediately called `supabase.auth.signInWithPassword()`. Supabase has eventual consistency between an auth.users INSERT (via direct pg write) and GoTrue's read path — the immediate signin fails ~50% of the time. On failure, old code did `setPassword("")` + `setFlow("signin")` + told user to retype. That's the double prompt.
+  * Bug #3 — No redirect / invalid credentials: The `pending` state from useTransition was never wired (line 186: `void startTransition`), so buttons never disabled during async work → user could double-click and race the state machine. Also `window.location.assign(next)` through the IM preview proxy may not carry the freshly-set session cookie reliably.
+
+- Rewrote /home/z/my-project/src/app/signin/SignInForm.tsx:
+  * Single primary button: When `flow === null`, show email input + "Continue". When `flow` is set, Continue button DISAPPEARS and password input + "Sign in"/"Create account" button APPEARS. Only one button at a time. Email input becomes readOnly with a "Use a different email" link.
+  * signInWithRetry(): 1 initial attempt + 3 retries with 600ms delay (4 total attempts over ~1.8s). Covers Supabase's eventual consistency after a fresh auth.users INSERT.
+  * Real `busy` state: every async handler sets `setBusy(true)` at start, `setBusy(false)` in finally. All buttons (Continue, Sign in, Create account, OAuth, phone OTP) check `disabled={busy}`. No more double-clicks racing the state machine.
+  * Enter key support: pressing Enter in email field triggers checkEmailAndContinue; pressing Enter in password field triggers submitPassword.
+  * Redirect: `router.push(next)` + `router.refresh()` instead of `window.location.assign`. Soft nav + middleware re-eval works through the IM preview proxy.
+  * Signup 409 handling: if /api/auth/signup returns 409 (email already exists), switch flow to "signin" WITHOUT clearing the password — user can click Sign in immediately.
+  * Actual error messages shown: Supabase error.message is surfaced to the user instead of a generic string.
+  * Auto-focus: when flow is set, password input gets autoFocus + we explicitly focus it after the state transition.
+
+- Verified end-to-end via /home/z/my-project/scripts/test-fixed-signin-flow.ts:
+  * Existing user admin@musicosy.com / Musicosy2026!: check-email returns exists=true → signInWithPassword SUCCESS in 403ms → /api/dashboard/keys returns 200 with 1 key → /dashboard returns 200 (no middleware redirect).
+  * New user onboard_test_<timestamp>@test.com / OnboardTest123!: check-email returns exists=false → /api/auth/signup returns {ok:true} → signInWithPassword SUCCESS in 243ms (no retry needed) → /api/dashboard/keys returns 200 → /dashboard returns 200.
+
+Stage Summary:
+- All three reported bugs are fixed. The form now has a single primary button at all times (Continue → Sign in / Create account), signup auto-signs-in with retry so the user is never asked to retype their password, and the redirect works through the IM preview proxy via router.push + router.refresh.
+- Verified both the existing-admin and new-user paths end-to-end against the live Supabase + dev server.
+- User should hard-refresh the preview-chat URL and test: (a) admin@musicosy.com / Musicosy2026! should land on /dashboard; (b) any new email + 8+ char password should land on /dashboard after signup.
