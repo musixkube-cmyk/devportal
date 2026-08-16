@@ -433,3 +433,22 @@ Stage Summary:
 - API gateway accepts the seeded sk_live_ key and returns real data.
 - Browser flow: visit /signin → enter admin@musicosy.com / Musicosy2026! → Supabase SDK sets auth cookie → middleware reads cookie → /dashboard renders with real data.
 - KNOWN LIMITATION: The "service_role" key in .env is actually the anon key (user pasted the same JWT twice). Admin SDK operations that require service_role (e.g. createAdminClient().auth.admin.listUsers) will fail with 403. The signup flow works around this via direct Postgres INSERT. To fully enable admin features, user needs to fetch the real service_role key from Supabase Dashboard → Settings → API → service_role secret.
+
+---
+Task ID: fix-cross-origin-2026-08-17
+Agent: main
+Task: User reported "the get API key does not render bro" — dashboard /dashboard/keys page was showing skeleton forever, never loading the actual API keys.
+
+Work Log:
+- Reviewed dev.log: noticed the warning `Cross origin request detected from preview-chat-fb9add05-dad6-40f3-98dd-e51874b39be9.space-z.ai to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.`
+- Root cause: user is accessing the dev server through the IM gateway preview domain `preview-chat-<chat-id>.space-z.ai`. Next.js 16 blocks cross-origin /_next/* requests by default — the dashboard's client-side JS chunks were never loaded, the page never hydrated, the fetch to /api/dashboard/keys never fired, the keys list stayed on the SSR skeleton forever.
+- Verified the API itself works: signed in via @supabase/ssr browser client, hit /api/dashboard/keys with the resulting cookie, got HTTP 200 with the seeded "Master Key" (label, prefix, lastFour). The /dashboard/keys page itself also returned HTTP 200 (no middleware redirect). The bug was purely on the client-rendering side.
+- Fix: added `allowedDevOrigins` to next.config.ts with patterns covering the IM gateway preview domains: `preview-chat-*.space-z.ai`, `preview-*.space-z.ai`, `*.space-z.ai`, plus `localhost`, `127.0.0.1`, and the LAN IP `21.0.16.199`.
+- Restarted dev server using `setsid -f` (proper detachment — earlier attempts with nohup/setsid/setsid+bash -c all died when the parent shell exited because the process group was being SIGKILLed; `setsid -f` alone with all stdio redirected is the only invocation that survives).
+- Verified post-fix: cross-origin GET /_next/static/chunks/*.js with the preview-chat Origin header returns HTTP 200 (was being blocked before). End-to-end sign-in → /dashboard/keys → /api/dashboard/keys all return 200. No more cross-origin warning in dev.log.
+
+Stage Summary:
+- Bug was NOT in the API or the auth flow — those were verified working.
+- Bug was a Next.js 16 dev-server CORS-like protection blocking /_next/* from the IM preview domain, which prevented client hydration, which prevented the fetch from firing, which kept the page on the skeleton forever.
+- Fix is one config addition (allowedDevOrigins). Dev server is back up at http://localhost:3000, persistent via setsid -f.
+- User can now refresh the preview-chat URL and the dashboard will hydrate, fetch the keys, and render the Master Key row (label, sk_live_2B4t_sga…4A6U, Active status, last-used timestamp, roll/revoke buttons).
