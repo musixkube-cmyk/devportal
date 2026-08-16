@@ -358,3 +358,53 @@ Stage Summary:
   4. Apply RLS policies from schema.md (currently RLS is ON but policies are permissive — UUID/text cast bugs in schema.md policies need fixing).
   5. Investigate "Praghql" — user mentioned using this, not yet researched.
   6. Rotate Supabase anon + service_role keys as defense-in-depth (the actual signing key was never pushed to remote, but hygiene-wise rotation is cheap).
+
+---
+Task ID: schema-alignment-2026-08-16-day2
+Agent: main
+Task: User returned (it's tomorrow now). Resolve the two open schema items: (1) Apply full 170-table schema to live DB; (2) Resolve public.users + api_keys snake_case/camelCase conflicts.
+
+Work Log:
+- Re-inspected uploaded schema file `upload/Pasted Content_1786857803440.txt` (2137 lines, 149 CREATE TABLE statements).
+- Re-queried live DB table list: **152 tables in live DB** (vs 149 in uploaded file). Live DB has MORE tables than the uploaded schema.
+- Diff result:
+  - **Tables in uploaded schema but MISSING from live DB**: just 1 — `webhooks`
+  - **Tables in live DB but NOT in uploaded schema**: 4 — `connector_connections`, `connectors`, `users` (i.e. public.users), `webhook_subscriptions`
+  - **Tables in both**: 148 (overlap, do not touch)
+- Investigated the 1 "missing" table (`webhooks`):
+  - `webhook_deliveries` (live) has FK to `webhook_subscriptions(id)`, NOT to `webhooks(id)`.
+  - `webhook_subscriptions` is the production equivalent of the uploaded schema's `webhooks` — richer schema (organization_id, attempts, last_triggered, status enum) than the uploaded file's `webhooks` table.
+  - No FK in the live DB references the missing `webhooks` table — no dangling references, no actual gap.
+  - **Conclusion: nothing to create.** The uploaded schema's `webhooks` is just an older/different name for the same concept already covered by `webhook_subscriptions`.
+- Investigated `public.users` (the so-called "conflict"):
+  - `public.users` exists with 1 admin row: admin@musicosy.com (role=admin, verified=true).
+  - **76 foreign keys** across the live DB reference `public.users(id)` — including `profiles`, `follows`, `posts`, `api_keys`, `developer_profiles`, `webhook_subscriptions`, etc.
+  - The uploaded schema's FK declarations point to `auth.users(id)` — but the LIVE DB intentionally uses `public.users(id)` instead, and that's the table actually referenced by everything.
+  - **Conclusion: NO conflict.** `public.users` is the production users table. The uploaded schema's `auth.users` references were a mistake in the uploaded file, not a problem with the live DB. The live DB is correct.
+- Investigated `api_keys` shape:
+  - Live DB: snake_case columns (`user_id`, `key_hash`, `last_used`, `last_used_ip`, `revoked`, `organization_id`, `name`), uuid id, `scopes` is `text[]` array, has `organization_id` for multi-tenant.
+  - Uploaded schema: camelCase columns (`userId`, `hashedKey`, `lastUsedAt`), TEXT id, `scopes` is CSV string, NO `organization_id`.
+  - **Conclusion: live DB shape is richer and more correct.** The uploaded schema is an older simpler draft. No action needed — the live DB is already in the desired state.
+- Verified the existing Prisma schema (`prisma/schema.prisma`) was STALE:
+  - 7 models, camelCase field names, no `@map` annotations — would not actually work against the live DB's snake_case columns.
+  - Confirmed via grep: NO file in `src/` actually imports the Prisma Client for queries (only `src/lib/db.ts` creates the singleton, but no caller uses it). Runtime queries use `pgPool` directly with snake_case SQL.
+- Regenerated `prisma/schema.prisma` via `npx prisma db pull`:
+  - Now contains all **152 models** matching the live DB exactly.
+  - snake_case field names matching actual columns.
+  - Proper types: `@db.Uuid`, `@db.Timestamptz(6)`, `@db.Date`, `String[]` for arrays.
+  - All relations, indexes (with original names via `map:`), and `@@map("table_name")` annotations preserved.
+- Generated fresh Prisma Client via `npx prisma generate` — succeeded.
+- Verified `src/` is TS-clean (no errors). Errors in `examples/` and `repos/Musicosy-Developer/` are from a separate cloned reference repo (gitignored) — not our project.
+
+Stage Summary:
+- **Issue #1 (Apply full schema to live DB): ALREADY DONE in a prior session.** Live DB has 152 tables covering all 27 domains. No additional tables need to be created. The uploaded file is redundant.
+- **Issue #2 (Resolve public.users + api_keys conflicts): NOT CONFLICTS.** The live DB is already in the desired state:
+  - `public.users` is the production users table, correctly referenced by 76 FKs. Do NOT drop it.
+  - `api_keys` (live) has the richer snake_case + uuid + multi-tenant shape. Do NOT replace it with the uploaded file's simpler camelCase + TEXT shape.
+  - The uploaded schema file's `auth.users` references and camelCase columns were a mistake in that file, not in the live DB.
+- **Prisma schema regenerated**: from 7 stale camelCase models → 152 correct snake_case models matching the live DB. Committed as `chore(db): regenerate Prisma schema from live DB (152 models, snake_case)`.
+- Outstanding (still on the list):
+  1. RLS is ON on all tables but policies are permissive (schema.md RLS policies have UUID/text cast bugs — proper policies are still a follow-up).
+  2. "Praghql" investigation — user mentioned this; still not researched.
+  3. Rotate Supabase anon + service_role keys as defense-in-depth (still pending).
+  4. The uploaded schema file (`upload/Pasted Content_1786857803440.txt`) is now obsolete — live DB is the source of truth. Recommend user delete it or archive it; it's already gitignored under `/upload/`.
