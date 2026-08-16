@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware";
+import { IS_SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 
 /**
  * Middleware runs on every matched request. Two responsibilities:
@@ -16,6 +17,13 @@ import { createMiddlewareClient } from "@/lib/supabase/middleware";
  * don't pay the cost on hot static requests.
  */
 export async function middleware(request: NextRequest) {
+  // When Supabase is not configured, the app runs in "no auth" mode:
+  // middleware passes through, dashboard routes may show empty data
+  // instead of bouncing to /signin.
+  if (!IS_SUPABASE_CONFIGURED) {
+    return NextResponse.next();
+  }
+
   const { supabase, response } = createMiddlewareClient(request);
 
   // Refreshes session if expired; mutates response cookies when it does.
