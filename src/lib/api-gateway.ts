@@ -146,8 +146,6 @@ export function getApiKey(req: GatewayRequest): AuthenticatedKey | undefined {
  * block a consumer request.
  *
  * We don't await this from the gateway path — it fires in the background.
- *
- * TODO(P3): replace with a queue + batch insert once volume warrants.
  */
 export function recordApiEvent(params: {
   apiKeyId: string;
@@ -164,21 +162,25 @@ export function recordApiEvent(params: {
   // Fire-and-forget. Don't let audit failures break user requests.
   void (async () => {
     try {
-      const { db } = await import("@/lib/db");
-      await db.apiKeyEvent.create({
-        data: {
-          apiKeyId: params.apiKeyId,
-          userId: params.userId,
-          method: params.method,
-          path: params.path,
-          status: params.status,
-          durationMs: params.durationMs,
-          bytesIn: params.bytesIn ?? 0,
-          bytesOut: params.bytesOut ?? 0,
-          errorCode: params.errorCode ?? null,
-          requestId: params.requestId ?? null,
-        },
-      });
+      const { pgPool } = await import("@/lib/pg");
+      await pgPool.query(
+        `INSERT INTO api_key_events
+           ("apiKeyId", "userId", method, path, status, "durationMs",
+            "bytesIn", "bytesOut", "errorCode", "requestId")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          params.apiKeyId,
+          params.userId,
+          params.method,
+          params.path,
+          params.status,
+          params.durationMs,
+          params.bytesIn ?? 0,
+          params.bytesOut ?? 0,
+          params.errorCode ?? null,
+          params.requestId ?? null,
+        ],
+      );
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console
@@ -193,9 +195,6 @@ export function recordApiEvent(params: {
  *
  * Best-effort: failures are swallowed. We don't want to block a user's
  * request because the usage touch failed.
- *
- * Debounced implicitly: we don't need to update on every single request.
- * A future optimization is to only touch every N seconds per key.
  */
 export function touchKeyUsage(params: {
   apiKeyId: string;
@@ -203,14 +202,14 @@ export function touchKeyUsage(params: {
 }): void {
   void (async () => {
     try {
-      const { db } = await import("@/lib/db");
-      await db.apiKey.update({
-        where: { id: params.apiKeyId },
-        data: {
-          lastUsedAt: new Date(),
-          lastUsedIp: params.ip,
-        },
-      });
+      const { pgPool } = await import("@/lib/pg");
+      await pgPool.query(
+        `UPDATE api_keys
+         SET "lastUsedAt" = now(),
+             "lastUsedIp" = $2
+         WHERE id = $1`,
+        [params.apiKeyId, params.ip],
+      );
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console

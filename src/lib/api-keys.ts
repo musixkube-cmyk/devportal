@@ -43,24 +43,37 @@ export function hashApiKey(rawSecret: string): string {
  * Looks up an API key by hashing the incoming secret and matching against
  * `hashedKey`. Returns the key row (without the hash) or null.
  *
- * Used by the API gateway / request auth layer (TBD when API gateway lands).
+ * Uses the direct pg pool instead of Prisma to avoid the "prepared statement
+ * already exists" error that occurs with Supabase's transaction-mode pooler.
  */
 export async function findApiKeyByRawSecret(rawSecret: string) {
-  const { db } = await import("@/lib/db");
+  const { pgPool } = await import("@/lib/pg");
   const hashedKey = hashApiKey(rawSecret);
-  const row = await db.apiKey.findUnique({
-    where: { hashedKey },
-    select: {
-      id: true,
-      userId: true,
-      label: true,
-      scopes: true,
-      revokedAt: true,
-      expiresAt: true,
-    },
-  });
+  const result = await pgPool.query<{
+    id: string;
+    user_id: string;
+    label: string;
+    scopes: string;
+    revoked_at: Date | null;
+    expires_at: Date | null;
+  }>(
+    `SELECT id, "userId" AS user_id, label, scopes,
+            "revokedAt" AS revoked_at, "expiresAt" AS expires_at
+     FROM api_keys
+     WHERE "hashedKey" = $1
+     LIMIT 1`,
+    [hashedKey],
+  );
+  const row = result.rows[0];
   if (!row) return null;
-  if (row.revokedAt) return null;
-  if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
-  return row;
+  if (row.revoked_at) return null;
+  if (row.expires_at && row.expires_at.getTime() < Date.now()) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    label: row.label,
+    scopes: row.scopes,
+    revokedAt: row.revoked_at,
+    expiresAt: row.expires_at,
+  };
 }

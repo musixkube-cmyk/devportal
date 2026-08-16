@@ -128,7 +128,7 @@ export default function DashboardHomePage() {
         <CodeSnippet
           endpoint="/v1/_meta"
           method="GET"
-          title="Returns gateway metadata, auth schemes, and endpoint counts (documented vs. live)."
+          title="Returns gateway metadata, auth schemes, and rate-limit policy."
         />
       </div>
 

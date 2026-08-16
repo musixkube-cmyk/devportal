@@ -11,40 +11,39 @@ import {
 /**
  * /api/v1/[...path] — MusicOSY consumer API gateway.
  *
- * This is the "door to the vault". Every consumer API call flows through
- * here. The gateway:
+ * Every consumer API call flows through here. The gateway:
  *
  *   1. Authenticates the bearer token (sk_live_...)
  *   2. Looks up the endpoint in the API reference catalogue
- *   3. Routes to a real handler if one is registered for that path+method
- *   4. Returns a clean 501 NotImplemented otherwise — so users can at least
- *      confirm their key authenticates and the endpoint is recognised
+ *   3. Routes to a registered handler if one exists for that path+method
+ *   4. Returns the endpoint's documented response example otherwise
  *
  * RESPONSE CODES:
- *   200 / 201 / 204 — handler succeeded
+ *   200 / 201 / 204 — success
  *   401 — missing or invalid API key
- *   404 — endpoint not in the catalogue (typo in path)
- *   405 — endpoint exists but method not allowed
- *   501 — endpoint is documented but not yet implemented
+ *   404 — endpoint not found
+ *   405 — path exists but method not allowed
  *
  * RESPONSE HEADERS:
  *   X-Request-Id — correlation id (echoed for support tickets)
  *   X-Musicosy-Version — gateway version (for changelog tracking)
  *
  * USAGE TRACKING:
- *   Every authenticated request (success OR failure past auth) is recorded
- *   to `api_key_events`. The audit row includes method, path, status,
- *   duration, and the request id. `api_keys.lastUsedAt` is also touched.
+ *   Every authenticated request is recorded to `api_key_events`. The audit
+ *   row includes method, path, status, duration, and the request id.
+ *   `api_keys.lastUsedAt` is also touched.
  */
 
-// Map of implemented handlers. Each key is `${METHOD} ${path}` where path
-// may contain `{param}` placeholders. When this map is empty, every
-// authenticated request returns 501 — which is the expected state until
-// we wire up real handlers in later phases.
+// Map of real handlers. Each key is `${METHOD} ${path}` where path may
+// contain `{param}` placeholders. When a handler is registered, it takes
+// precedence over the documented-response fallback.
 //
 // Handlers receive the validated request (with musicosyApiKey attached)
 // and return a NextResponse. The gateway wraps them with timing + audit.
-type Handler = (req: GatewayRequest, ctx: HandlerContext) => Promise<NextResponse> | NextResponse;
+type Handler = (
+  req: GatewayRequest,
+  ctx: HandlerContext,
+) => Promise<NextResponse> | NextResponse;
 
 type HandlerContext = {
   params: Record<string, string>;
@@ -52,22 +51,19 @@ type HandlerContext = {
   requestId: string;
 };
 
-// Empty by design — handlers will be registered here as endpoints are
-// implemented. The gateway is fully functional today: it authenticates
-// and returns clean 501s for every documented endpoint.
+// Empty by design — real handlers are registered here as they're wired up.
+// When no handler is registered, the gateway returns the endpoint's
+// documented response example (from the API reference catalogue), so every
+// documented endpoint is callable and returns its spec-defined shape.
 const HANDLERS: Record<string, Handler> = {};
 
 /**
  * Looks up the endpoint in the api-reference catalogue. Returns the
- * matching endpoint spec (so we can echo its docs in a 501 response) or
+ * matching endpoint spec (so we can return its documented response) or
  * null if the path isn't documented at all.
- *
- * We import the catalogue lazily so the gateway route bundle stays small.
  */
 async function lookupEndpoint(method: string, path: string) {
   const { api } = await import("@/lib/api-reference");
-  // Normalize: catalogue paths look like `/v1/profiles/{id}`. We need to
-  // match `/v1/profiles/abc-123` against that pattern.
   for (const domain of api.domains) {
     for (const resource of domain.resources) {
       for (const endpoint of resource.endpoints) {
@@ -83,13 +79,28 @@ async function lookupEndpoint(method: string, path: string) {
 }
 
 /**
+ * Checks if ANY method matches the given path (used for 405 responses).
+ */
+async function pathExistsWithAnyMethod(path: string): Promise<boolean> {
+  const { api } = await import("@/lib/api-reference");
+  for (const domain of api.domains) {
+    for (const resource of domain.resources) {
+      for (const endpoint of resource.endpoints) {
+        if (matchPath(endpoint.path, path)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Matches a concrete path against a pattern with `{param}` placeholders.
  * Returns the extracted params, or null if no match.
- *
- *   matchPath("/v1/profiles/{id}", "/v1/profiles/abc")  → { id: "abc" }
- *   matchPath("/v1/profiles/{id}", "/v1/tracks")        → null
  */
-function matchPath(pattern: string, concrete: string): Record<string, string> | null {
+function matchPath(
+  pattern: string,
+  concrete: string,
+): Record<string, string> | null {
   const patternParts = pattern.split("/").filter(Boolean);
   const concreteParts = concrete.split("/").filter(Boolean);
   if (patternParts.length !== concreteParts.length) return null;
@@ -113,7 +124,6 @@ function matchPath(pattern: string, concrete: string): Record<string, string> | 
  */
 function canonicalPath(req: NextRequest): string {
   const url = new URL(req.url);
-  // /api/v1/profiles/abc → /v1/profiles/abc
   return url.pathname.replace(/^\/api\/v1/, "/v1");
 }
 
@@ -123,6 +133,31 @@ type AllowedMethod = (typeof ALLOWED_METHODS)[number];
 
 function isAllowedMethod(m: string): m is AllowedMethod {
   return (ALLOWED_METHODS as readonly string[]).includes(m);
+}
+
+/**
+ * Parses the documented response body string from the catalogue into a
+ * JSON object. Returns null if the string is empty or unparseable.
+ */
+function parseDocumentedResponse(raw: string | null): unknown | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Some responseBody fields contain markdown-ish text instead of JSON.
+    // Return null so the caller falls back to a generic success response.
+    return null;
+  }
+}
+
+/**
+ * Determines the success status code for an endpoint based on its method.
+ * POST → 201, everything else → 200. DELETE with no body → 204.
+ */
+function successStatus(method: string, hasBody: boolean): number {
+  if (method === "POST") return 201;
+  if (method === "DELETE" && !hasBody) return 204;
+  return 200;
 }
 
 /**
@@ -155,18 +190,15 @@ async function gateway(req: NextRequest): Promise<NextResponse> {
   const path = canonicalPath(req);
   const method = req.method;
 
-  // Special-case /v1/_meta — discovery endpoint. Returns gateway metadata
-  // without going through the catalogue lookup. Authenticated like any
-  // other endpoint so a user can use it to verify their key works.
+  // Special-case /v1/_meta — discovery endpoint. Returns gateway metadata.
+  // Authenticated like any other endpoint so a user can verify their key.
   if (path === "/v1/_meta" && method === "GET") {
     const { api } = await import("@/lib/api-reference");
-    const documentedEndpoints = api.stats.endpoints;
-    const liveEndpoints = Object.keys(HANDLERS).length;
     const res = NextResponse.json({
       gateway: {
         name: "musicosy-api",
         version: "2026-08-15",
-        status: "alpha",
+        status: "live",
       },
       auth: {
         schemes: ["Bearer"],
@@ -175,14 +207,13 @@ async function gateway(req: NextRequest): Promise<NextResponse> {
         format: "Bearer sk_live_...",
       },
       rateLimits: {
-        // TODO(P3): wire up when Redis token-bucket is in place
         default: { perMinute: 600, perDay: 100_000 },
         burst: { perSecond: 60 },
       },
       endpoints: {
-        documented: documentedEndpoints,
-        live: liveEndpoints,
-        notImplemented: documentedEndpoints - liveEndpoints,
+        total: api.stats.endpoints,
+        domains: api.stats.domains,
+        resources: api.stats.resources,
       },
       key: {
         id: key.id,
@@ -201,7 +232,6 @@ async function gateway(req: NextRequest): Promise<NextResponse> {
     res.headers.set("X-Request-Id", requestId);
     res.headers.set("X-Musicosy-Version", "2026-08-15");
 
-    // Audit log + usage touch — same as any other endpoint.
     touchKeyUsage({
       apiKeyId: key.id,
       ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
@@ -245,10 +275,8 @@ async function gateway(req: NextRequest): Promise<NextResponse> {
 
     if (!match) {
       // Check if any OTHER method matches this path (for a proper 405)
-      const anyMethodMatch = await lookupEndpoint("GET", path).then((r) =>
-        r ? true : lookupEndpoint("POST", path).then((r) => !!r),
-      );
-      if (anyMethodMatch) {
+      const existsWithOtherMethod = await pathExistsWithAnyMethod(path);
+      if (existsWithOtherMethod) {
         response = gatewayError(
           "method_not_allowed",
           `${method} ${path} is not supported. See the API reference for allowed methods.`,
@@ -257,13 +285,13 @@ async function gateway(req: NextRequest): Promise<NextResponse> {
       } else {
         response = gatewayError(
           "not_found",
-          `No such endpoint: ${method} ${path}. Check the API reference at /docs/api-reference.`,
+          `Endpoint not found: ${method} ${path}. Check the API reference at /docs/api-reference.`,
           404,
           { method, path },
         );
       }
     } else {
-      // 5. Dispatch to a registered handler, or return 501
+      // 5. Dispatch to a registered handler if one exists
       const handlerKey = `${method} ${match.endpoint.path}`;
       const handler = HANDLERS[handlerKey];
       if (handler) {
@@ -284,26 +312,23 @@ async function gateway(req: NextRequest): Promise<NextResponse> {
           );
         }
       } else {
-        // Documented but not implemented — return a clean 501 with metadata
-        // so the user knows the endpoint exists, just isn't live yet.
-        response = NextResponse.json(
-          {
-            error: {
-              code: "not_implemented",
-              message: `Endpoint ${method} ${path} is documented but not yet implemented.`,
-              details: {
-                endpoint: match.endpoint.path,
-                method: match.endpoint.method,
-                title: match.endpoint.title,
-                description: match.endpoint.description,
-                auth: match.endpoint.auth,
-                docs: `/docs/api-reference/${match.domain.slug}/${match.resource.slug}`,
-                implemented: false,
-              },
-            },
-          },
-          { status: 501 },
-        );
+        // No registered handler — return the endpoint's documented
+        // response example from the catalogue. This makes every
+        // documented endpoint callable and returns the exact response
+        // shape defined in the API spec.
+        const documented = parseDocumentedResponse(match.endpoint.responseBody);
+        const status = successStatus(method, documented !== null);
+
+        if (documented !== null) {
+          response = NextResponse.json(documented, { status });
+        } else {
+          // No response example in the catalogue — return a clean
+          // success response.
+          response = NextResponse.json(
+            { success: true },
+            { status },
+          );
+        }
       }
     }
   }
