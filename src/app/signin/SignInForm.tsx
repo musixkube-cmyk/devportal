@@ -1,42 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition, useCallback, useEffect, useRef } from "react";
-import type { CSSProperties } from "react";
+import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
-
-// ---------- on-page debugger ----------
-// Visible fixed panel (bottom-right) that captures every step of the
-// sign-in flow so we can diagnose what's actually happening in the
-// browser — not what a server-side script thinks is happening.
-// Mirror every line to console.log as well so DevTools keeps it.
-type LogLine = { t: string; msg: string; kind: "info" | "ok" | "warn" | "err" };
-
-function ts() {
-  const d = new Date();
-  return (
-    d.getHours().toString().padStart(2, "0") + ":" +
-    d.getMinutes().toString().padStart(2, "0") + ":" +
-    d.getSeconds().toString().padStart(2, "0") + "." +
-    d.getMilliseconds().toString().padStart(3, "0")
-  );
-}
-
-function sbCookies(): string[] {
-  if (typeof document === "undefined") return [];
-  return document.cookie
-    .split("; ")
-    .filter((c) => c.startsWith("sb-"))
-    .map((c) => c.split("=")[0]);
-}
-
-function cookiePreview(): string {
-  const sb = sbCookies();
-  if (sb.length === 0) return "[no sb-* cookies]";
-  const val = document.cookie.match(/sb-[^=]+=([^;]+)/)?.[1] ?? "";
-  return sb.join(", ") + " (val_len=" + val.length + ")";
-}
 
 /**
  * Musicosy sign-in / sign-up form.
@@ -78,44 +45,6 @@ export default function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // ---------- debug state ----------
-  const [logs, setLogs] = useState<LogLine[]>([]);
-  const [showDebug, setShowDebug] = useState(true);
-  const logBoxRef = useRef<HTMLDivElement | null>(null);
-
-  const dbg = useCallback((msg: string, kind: LogLine["kind"] = "info") => {
-    const line: LogLine = { t: ts(), msg, kind };
-    // eslint-disable-next-line no-console
-    const fn = kind === "err" ? console.error : kind === "warn" ? console.warn : console.log;
-    fn("[signin]", msg);
-    setLogs((prev) => [...prev, line].slice(-100));
-  }, []);
-
-  useEffect(() => {
-    dbg(`page loaded — next=${next} | origin=${typeof window !== "undefined" ? window.location.origin : "?"} | cookies=${cookiePreview()}`, "info");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (logBoxRef.current) {
-      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  // Probe middleware: fetch /dashboard/keys WITH credentials and report status
-  // without leaving the page. Tells us whether the session cookie is being
-  // accepted by middleware right now.
-  async function probeDashboard() {
-    dbg("probe: GET /dashboard/keys (credentials: include, redirect: manual)", "info");
-    try {
-      const r = await fetch("/dashboard/keys", { credentials: "include", redirect: "manual" });
-      dbg(`probe: status=${r.status} type=${r.type} url=${r.url}`, r.status === 200 ? "ok" : "warn");
-    } catch (e: unknown) {
-      dbg(`probe: threw ${e instanceof Error ? e.message : String(e)}`, "err");
-    }
-    dbg(`cookies now: ${cookiePreview()}`, "info");
-  }
-
   // router is currently unused for navigation (we use window.location.assign
   // in finish() for hard navigation that includes the session cookie), but
   // we keep the binding for future soft-navigation use cases.
@@ -126,7 +55,6 @@ export default function SignInForm() {
     // supabase-js needs to be in the request headers for the /dashboard
     // middleware check. A soft client-side navigation can race with the
     // cookie write and cause a redirect loop (dashboard → signin → dashboard).
-    dbg(`finish: window.location.assign(${next}) | cookies=${cookiePreview()}`, "info");
     window.location.assign(next);
   }
 
@@ -135,27 +63,20 @@ export default function SignInForm() {
     setError(null);
     setInfo(null);
     setCheckingEmail(true);
-    dbg(`checkEmail: POST /api/auth/check-email email=${email.trim()}`, "info");
     try {
       const res = await fetch("/api/auth/check-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
       });
-      dbg(`checkEmail: status=${res.status}`, res.ok ? "ok" : "warn");
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        dbg(`checkEmail: error body=${JSON.stringify(data)}`, "err");
         setError(data.error || "Could not verify email. Try again.");
         return;
       }
-      const body = await res.json();
-      dbg(`checkEmail: body=${JSON.stringify(body)}`, "info");
-      const { exists } = body;
+      const { exists } = await res.json();
       setFlow(exists ? "signin" : "signup");
-      dbg(`checkEmail: flow=${exists ? "signin" : "signup"}`, "ok");
-    } catch (e: unknown) {
-      dbg(`checkEmail: threw ${e instanceof Error ? e.message : String(e)}`, "err");
+    } catch {
       setError("Network error. Try again.");
     } finally {
       setCheckingEmail(false);
@@ -166,19 +87,12 @@ export default function SignInForm() {
   async function submitPassword() {
     setError(null);
     setInfo(null);
-    dbg(`submitPassword: flow=${flow} email=${email.trim()} | cookies(before)=${cookiePreview()}`, "info");
 
     if (flow === "signin") {
-      const t0 = Date.now();
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
-      dbg(
-        `signInWithPassword: ${Date.now() - t0}ms | error=${error ? JSON.stringify({ name: error.name, message: error.message, status: (error as unknown as { status?: number }).status }) : "null"} | user=${data.user ? data.user.id : "null"} | session=${data.session ? "yes" : "no"}`,
-        error ? "err" : "ok",
-      );
-      dbg(`cookies(after signIn)=${cookiePreview()}`, "info");
       if (error) {
         setError(error.message);
         return;
@@ -198,34 +112,23 @@ export default function SignInForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
       });
-    } catch (e: unknown) {
-      dbg(`signup fetch threw: ${e instanceof Error ? e.message : String(e)}`, "err");
+    } catch {
       setError("Network error during sign-up. Try again.");
       return;
     }
-    dbg(`signup: status=${signupRes.status}`, signupRes.ok ? "ok" : "warn");
 
     if (!signupRes.ok) {
       const data = await signupRes.json().catch(() => ({}));
-      dbg(`signup error body=${JSON.stringify(data)}`, "err");
       setError(data.error || "Sign-up failed. Try again.");
       return;
     }
 
-    const signupBody = await signupRes.json().catch(() => ({}));
-    dbg(`signup ok body=${JSON.stringify(signupBody)}`, "ok");
-
     // Account created (and email_confirmed_at set). Now sign in client-side
     // to obtain a session.
-    dbg(`signup: calling signInWithPassword to establish session...`, "info");
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
-    dbg(
-      `post-signup signIn: error=${signInError ? JSON.stringify({ name: signInError.name, message: signInError.message }) : "null"} | user=${signInData.user ? signInData.user.id : "null"} | cookies=${cookiePreview()}`,
-      signInError ? "err" : "ok",
-    );
     if (signInError) {
       // Account was created but sign-in failed — rare, but tell the user
       // to try signing in manually.
@@ -464,72 +367,9 @@ export default function SignInForm() {
           </p>
         </div>
       </div>
-
-      {/* ---------- on-page debugger panel ---------- */}
-      {showDebug && (
-        <div
-          style={{
-            position: "fixed",
-            right: 12,
-            bottom: 12,
-            width: "min(560px, calc(100vw - 24px))",
-            maxHeight: "42vh",
-            background: "#0b0b0c",
-            color: "#e5e5e5",
-            border: "1px solid #2a2a2a",
-            borderRadius: 8,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            fontSize: 11,
-            lineHeight: 1.4,
-            zIndex: 9999,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px solid #2a2a2a", background: "#141416" }}>
-            <span style={{ fontWeight: 600, color: "#9ca3af" }}>SIGN-IN DEBUGGER</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={probeDashboard} style={btnStyle}>probe /dashboard/keys</button>
-              <button onClick={() => { navigator.clipboard?.writeText(logs.map((l) => `${l.t} ${l.kind.padEnd(4)} ${l.msg}`).join("\n")); }} style={btnStyle}>copy</button>
-              <button onClick={() => setLogs([])} style={btnStyle}>clear</button>
-              <button onClick={() => setShowDebug(false)} style={btnStyle}>×</button>
-            </div>
-          </div>
-          <div ref={logBoxRef} style={{ overflowY: "auto", padding: "6px 10px", flex: 1 }}>
-            {logs.length === 0 && <div style={{ color: "#6b7280" }}>(no events yet)</div>}
-            {logs.map((l, i) => (
-              <div key={i} style={{ marginBottom: 2, color: l.kind === "err" ? "#f87171" : l.kind === "warn" ? "#fbbf24" : l.kind === "ok" ? "#34d399" : "#d1d5db", wordBreak: "break-all" }}>
-                <span style={{ color: "#6b7280" }}>{l.t}</span>{" "}
-                <span style={{ fontWeight: 600 }}>{l.kind.toUpperCase()}</span>{" "}
-                {l.msg}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {!showDebug && (
-        <button
-          onClick={() => setShowDebug(true)}
-          style={{ position: "fixed", right: 12, bottom: 12, zIndex: 9999, ...btnStyle, background: "#0b0b0c", color: "#e5e5e5", border: "1px solid #2a2a2a" }}
-        >
-          debug
-        </button>
-      )}
     </main>
   );
 }
-
-const btnStyle: CSSProperties = {
-  background: "#1f1f23",
-  color: "#e5e5e5",
-  border: "1px solid #2a2a2a",
-  borderRadius: 4,
-  padding: "3px 8px",
-  fontSize: 10,
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-  cursor: "pointer",
-};
 
 function PhoneIcon() {
   return (
