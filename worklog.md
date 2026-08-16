@@ -482,3 +482,29 @@ Stage Summary:
 - All three reported bugs are fixed. The form now has a single primary button at all times (Continue → Sign in / Create account), signup auto-signs-in with retry so the user is never asked to retype their password, and the redirect works through the IM preview proxy via router.push + router.refresh.
 - Verified both the existing-admin and new-user paths end-to-end against the live Supabase + dev server.
 - User should hard-refresh the preview-chat URL and test: (a) admin@musicosy.com / Musicosy2026! should land on /dashboard; (b) any new email + 8+ char password should land on /dashboard after signup.
+
+---
+Task ID: signin-debugger-on-page
+Agent: main
+Task: Add visible on-page debugger to /signin so the user can diagnose the real-browser redirect bug
+
+Work Log:
+- Reverted today's auth changes (SignInForm.tsx, middleware.ts, supabase/*) back to yesterday's state via `git checkout 53859ba -- ...`. Today's rewrite had switched the post-login redirect from `window.location.assign(next)` to `router.push(next)` + `router.refresh()`, which races the session-cookie write — middleware sees no session and bounces back to /signin. That's the "enter password → return to login" bug the user reported.
+- Kept next.config.ts allowedDevOrigins (dashboard fix, unrelated).
+- Removed src/app/api/auth/debug-cookies/route.ts (added today, no longer needed).
+- Added a visible on-page debugger panel to SignInForm.tsx:
+  * Fixed bottom-right dark panel, ~560px wide, 42vh tall
+  * Logs every step: page load, check-email fetch, signInWithPassword result, signup fetch, post-signup signIn, finish redirect, cookie state before/after each call
+  * Color-coded: info=gray, ok=green, warn=yellow, err=red
+  * "probe /dashboard/keys" button: fetches /dashboard/keys with credentials:include + redirect:manual — tells us whether middleware accepts the session cookie right now, without leaving the page
+  * "copy" button: copies all log lines to clipboard so user can paste back
+  * "clear" and "×" buttons
+  * Collapsible to a small "debug" button in the corner
+- Mirrors every log line to console.log/warn/error for DevTools cross-reference.
+- Verified: dev server compiles /signin cleanly (HTTP 200, 31KB), panel renders server-side (grep "SIGN-IN DEBUGGER" present in served HTML).
+
+Stage Summary:
+- Root cause of today's regression identified: switching from window.location.assign to router.push raced the cookie write.
+- Reverted to yesterday's auth flow (window.location.assign).
+- Added on-page debugger so the user can SEE what's actually happening in their browser when they enter the password — instead of me guessing from server-side scripts. The "probe /dashboard/keys" button specifically tests whether middleware accepts the session cookie.
+- Next step: user opens /signin in the IM preview, attempts login, clicks "copy" on the debugger, pastes the log back so we can see the exact failure point.
