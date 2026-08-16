@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 
@@ -47,6 +47,47 @@ export default function SignInForm() {
   const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  // === DEBUG: detect cookie / iframe environment ===
+  // Set once on mount; surfaces as a visible panel on the signin page.
+  const [envDebug, setEnvDebug] = useState<{
+    origin: string;
+    isIframe: boolean;
+    cookieEnabled: boolean;
+    cookieLengthOnMount: number;
+    testCookieWorks: boolean | null;
+  } | null>(null);
+  useEffect(() => {
+    const origin = window.location.origin;
+    const isIframe = window.self !== window.top;
+    const cookieLengthOnMount = document.cookie.length;
+    // Try setting a test cookie and reading it back.
+    const testName = "__cookie_test__";
+    const testValue = String(Date.now());
+    let testCookieWorks = false;
+    try {
+      document.cookie = `${testName}=${testValue}; path=/; max-age=60; SameSite=Lax`;
+      const after = document.cookie;
+      testCookieWorks = after.includes(`${testName}=${testValue}`);
+    } catch {
+      testCookieWorks = false;
+    }
+    setEnvDebug({
+      origin,
+      isIframe,
+      cookieEnabled: navigator.cookieEnabled,
+      cookieLengthOnMount,
+      testCookieWorks,
+    });
+    // Log to console too so it shows up in dev tools.
+    console.log("[env-debug]", {
+      origin,
+      isIframe,
+      cookieEnabled: navigator.cookieEnabled,
+      cookieLengthOnMount,
+      testCookieWorks,
+    });
+  }, []);
 
   // --- Check email → set flow (the "Continue" button handler) ---
   async function checkEmailAndContinue() {
@@ -118,6 +159,18 @@ export default function SignInForm() {
       if (flow === "signin") {
         const ok = await signInWithRetry(email.trim(), password);
         if (!ok) return;
+        // DEBUG: Before redirecting, log what cookies the browser has
+        // and what the server sees. This will tell us whether the IM
+        // proxy is stripping the session cookie.
+        console.log("[signin-debug] After signInWithPassword, document.cookie length:", document.cookie.length);
+        console.log("[signin-debug] document.cookie preview:", document.cookie.slice(0, 200));
+        try {
+          const dbgRes = await fetch("/api/auth/debug-cookies", { credentials: "include" });
+          const dbgBody = await dbgRes.json();
+          console.log("[signin-debug] Server /api/auth/debug-cookies response:", dbgBody);
+        } catch (e) {
+          console.log("[signin-debug] debug-cookies fetch failed:", e);
+        }
         // Use router so middleware re-evaluates server-side. Then refresh
         // to force any cached layouts to re-render with the new session.
         router.push(next);
@@ -162,6 +215,18 @@ export default function SignInForm() {
           "Account created, but automatic sign-in timed out. Click \"Sign in\" to continue.",
         );
         return;
+      }
+
+      // DEBUG: Same as above — see what cookies the browser has and what
+      // the server receives.
+      console.log("[signup-debug] After signInWithPassword, document.cookie length:", document.cookie.length);
+      console.log("[signup-debug] document.cookie preview:", document.cookie.slice(0, 200));
+      try {
+        const dbgRes = await fetch("/api/auth/debug-cookies", { credentials: "include" });
+        const dbgBody = await dbgRes.json();
+        console.log("[signup-debug] Server /api/auth/debug-cookies response:", dbgBody);
+      } catch (e) {
+        console.log("[signup-debug] debug-cookies fetch failed:", e);
       }
 
       // 3. Success — redirect.
@@ -263,6 +328,43 @@ export default function SignInForm() {
           ← Back
         </Link>
       </div>
+
+      {/* === TEMP DEBUG PANEL ===
+          Shows whether the browser environment can set+read cookies.
+          If testCookieWorks=false, cookies are disabled (likely a
+          sandboxed iframe) and the auth flow will fail because
+          supabase.auth.signInWithPassword can't persist the session. */}
+      {envDebug && (
+        <div
+          className="mx-auto mt-4 max-w-3xl border-2 border-dashed border-amber-500/50 bg-amber-50/50 p-3 font-mono text-xs dark:bg-amber-950/20"
+          style={{ whiteSpace: "pre-wrap" }}
+        >
+          <div className="mb-1 font-bold text-amber-700 dark:text-amber-400">
+            [DEBUG] Browser environment
+          </div>
+          <div>origin: {envDebug.origin}</div>
+          <div>isIframe: {String(envDebug.isIframe)}</div>
+          <div>navigator.cookieEnabled: {String(envDebug.cookieEnabled)}</div>
+          <div>document.cookie length on mount: {envDebug.cookieLengthOnMount}</div>
+          <div>
+            testCookieWorks:{" "}
+            <span
+              className={
+                envDebug.testCookieWorks ? "text-green-600" : "text-red-600 font-bold"
+              }
+            >
+              {String(envDebug.testCookieWorks)}
+            </span>
+          </div>
+          {envDebug.testCookieWorks === false && (
+            <div className="mt-2 text-red-700 dark:text-red-400">
+              ⚠ Cookies cannot be set in this browser environment. The Supabase
+              session cookie cannot be persisted, so login will fail. This is
+              likely because the page is rendered inside a sandboxed iframe.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-16 px-6 py-14 md:px-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-24 lg:py-24">
         {/* Left: logo */}
