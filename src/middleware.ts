@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware";
-import { IS_SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 
 /**
  * Middleware runs on every matched request. Two responsibilities:
@@ -17,45 +16,17 @@ import { IS_SUPABASE_CONFIGURED } from "@/lib/supabase/env";
  * don't pay the cost on hot static requests.
  */
 export async function middleware(request: NextRequest) {
-  // When Supabase is not configured, the app runs in "no auth" mode:
-  // middleware passes through, dashboard routes may show empty data
-  // instead of bouncing to /signin.
-  if (!IS_SUPABASE_CONFIGURED) {
-    return NextResponse.next();
-  }
-
   const { supabase, response } = createMiddlewareClient(request);
 
   // Refreshes session if expired; mutates response cookies when it does.
   const {
     data: { user },
-    error: userError,
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isDashboard = pathname.startsWith("/dashboard");
-
-  // TEMP DEBUG: log cookie state on /dashboard requests so we can see
-  // why middleware is bouncing authenticated users back to /signin.
-  if (isDashboard) {
-    const allCookies = request.cookies.getAll();
-    const sbCookies = allCookies.filter((c) =>
-      c.name.startsWith("sb-"),
-    );
-    console.log(
-      `[middleware DEBUG] ${request.method} ${pathname} — user=${
-        user ? user.id : "null"
-      } userError=${userError?.message ?? "none"} sbCookies=${sbCookies.length} totalCookies=${allCookies.length}`,
-    );
-    if (sbCookies.length === 0 && allCookies.length > 0) {
-      console.log(
-        `[middleware DEBUG] cookies present but no sb-* cookies:`,
-        allCookies.map((c) => c.name),
-      );
-    }
-  }
 
   // Guard /dashboard/*
+  const isDashboard = pathname.startsWith("/dashboard");
   if (isDashboard && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/signin";

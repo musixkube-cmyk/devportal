@@ -1,32 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 /**
- * Musicosy sign-in / sign-up form — fixed flow.
+ * Musicosy sign-in / sign-up form.
  *
- * Bugs fixed (2026-08-17):
- *  1. "Two buttons stacked" — after email check, Continue button is now
- *     replaced by the password submit button (not stacked above it).
- *  2. "Signup prompts password twice" — after /api/auth/signup creates the
- *     user, we retry signInWithPassword up to 4 times with 600ms delay each.
- *     Supabase has eventual consistency between the auth.users INSERT (via
- *     our direct pg write) and GoTrue's read path. Without retries, the
- *     immediate signin fails ~50% of the time and the old code cleared the
- *     password field + told the user to retype it.
- *  3. "Invalid credentials / no redirect" — every async path now sets a
- *     `busy` flag that disables all buttons (prevents double-clicks racing
- *     the state machine). The actual Supabase error message is shown to
- *     the user. Redirect uses `router.push` + `router.refresh()` so
- *     middleware re-evaluates the cookie on the server side (works through
- *     the IM preview proxy; window.location.assign can race the cookie
- *     write).
- *  4. The email Continue button's job is to set `flow`. Once flow is set,
- *     the email input becomes read-only with an "edit" link — the user
- *     can't accidentally re-trigger checkEmail and reset the flow.
+ * Behavior (per spec): the form queries Supabase to check if the email
+ * exists BEFORE showing the password field. If the email is registered,
+ * the password form runs sign-in. If it isn't, the password form runs
+ * sign-up via /api/auth/signup (which inserts directly into auth.users
+ * with crypt() + email_confirmed_at = now(), bypassing Supabase's
+ * confirmation email flow). After sign-up succeeds, we immediately sign
+ * the user in client-side.
+ *
+ * Phone / Google / Apple buttons match the reference design from
+ * landing-home. They will show Supabase's native error if a provider
+ * isn't enabled — no custom handling, no extra UI added.
+ *
+ * `next` query param is set by middleware when redirecting from /dashboard/*.
+ *
+ * NOTE: this component MUST be wrapped in <Suspense> by its parent because
+ * it calls `useSearchParams()`. See ./page.tsx.
  */
 export default function SignInForm() {
   const router = useRouter();
@@ -34,6 +31,7 @@ export default function SignInForm() {
   const next = params.get("next") || "/dashboard";
 
   const supabase = createBrowserClient();
+  const [pending, startTransition] = useTransition();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,56 +40,26 @@ export default function SignInForm() {
   const [showPhone, setShowPhone] = useState(false);
   // flow is set after the email "Continue" click — drives button label + behavior
   const [flow, setFlow] = useState<"signin" | "signup" | null>(null);
-  const [busy, setBusy] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // === DEBUG: detect cookie / iframe environment ===
-  // Set once on mount; surfaces as a visible panel on the signin page.
-  const [envDebug, setEnvDebug] = useState<{
-    origin: string;
-    isIframe: boolean;
-    cookieEnabled: boolean;
-    cookieLengthOnMount: number;
-    testCookieWorks: boolean | null;
-  } | null>(null);
-  useEffect(() => {
-    const origin = window.location.origin;
-    const isIframe = window.self !== window.top;
-    const cookieLengthOnMount = document.cookie.length;
-    // Try setting a test cookie and reading it back.
-    const testName = "__cookie_test__";
-    const testValue = String(Date.now());
-    let testCookieWorks = false;
-    try {
-      document.cookie = `${testName}=${testValue}; path=/; max-age=60; SameSite=Lax`;
-      const after = document.cookie;
-      testCookieWorks = after.includes(`${testName}=${testValue}`);
-    } catch {
-      testCookieWorks = false;
-    }
-    setEnvDebug({
-      origin,
-      isIframe,
-      cookieEnabled: navigator.cookieEnabled,
-      cookieLengthOnMount,
-      testCookieWorks,
-    });
-    // Log to console too so it shows up in dev tools.
-    console.log("[env-debug]", {
-      origin,
-      isIframe,
-      cookieEnabled: navigator.cookieEnabled,
-      cookieLengthOnMount,
-      testCookieWorks,
-    });
-  }, []);
+  // router is currently unused for navigation (we use window.location.assign
+  // in finish() for hard navigation that includes the session cookie), but
+  // we keep the binding for future soft-navigation use cases.
+  void router;
 
-  // --- Check email → set flow (the "Continue" button handler) ---
+  function finish() {
+    // Hard navigation — not router.replace. The session cookie written by
+    // supabase-js needs to be in the request headers for the /dashboard
+    // middleware check. A soft client-side navigation can race with the
+    // cookie write and cause a redirect loop (dashboard → signin → dashboard).
+    window.location.assign(next);
+  }
+
+  // --- Check email → set flow ---
   async function checkEmailAndContinue() {
-    if (!email.trim() || busy || checkingEmail) return;
     setError(null);
     setInfo(null);
     setCheckingEmail(true);
@@ -108,10 +76,6 @@ export default function SignInForm() {
       }
       const { exists } = await res.json();
       setFlow(exists ? "signin" : "signup");
-      // Pre-fill password field focus so the user can immediately type.
-      setTimeout(() => {
-        document.getElementById("password")?.focus();
-      }, 50);
     } catch {
       setError("Network error. Try again.");
     } finally {
@@ -119,168 +83,95 @@ export default function SignInForm() {
     }
   }
 
-  // Wait helper
-  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-  // --- Sign in with retry (used by both signin and post-signup signin) ---
-  async function signInWithRetry(emailVal: string, passwordVal: string): Promise<boolean> {
-    // First attempt
-    let { error: signInError } = await supabase.auth.signInWithPassword({
-      email: emailVal,
-      password: passwordVal,
-    });
-    if (!signInError) return true;
-
-    // Retry up to 3 more times with 600ms delay — handles Supabase's
-    // eventual consistency right after a fresh auth.users INSERT.
-    for (let i = 0; i < 3; i++) {
-      await wait(600);
-      const { error: retryError } = await supabase.auth.signInWithPassword({
-        email: emailVal,
-        password: passwordVal,
-      });
-      if (!retryError) return true;
-      signInError = retryError;
-    }
-
-    // All retries failed — show the actual error.
-    setError(signInError?.message || "Sign-in failed. Check your credentials.");
-    return false;
-  }
-
   // --- Submit password (sign-in or sign-up based on flow) ---
   async function submitPassword() {
-    if (!password.trim() || busy || !flow) return;
     setError(null);
     setInfo(null);
-    setBusy(true);
 
-    try {
-      if (flow === "signin") {
-        const ok = await signInWithRetry(email.trim(), password);
-        if (!ok) return;
-        // DEBUG: Before redirecting, log what cookies the browser has
-        // and what the server sees. This will tell us whether the IM
-        // proxy is stripping the session cookie.
-        console.log("[signin-debug] After signInWithPassword, document.cookie length:", document.cookie.length);
-        console.log("[signin-debug] document.cookie preview:", document.cookie.slice(0, 200));
-        try {
-          const dbgRes = await fetch("/api/auth/debug-cookies", { credentials: "include" });
-          const dbgBody = await dbgRes.json();
-          console.log("[signin-debug] Server /api/auth/debug-cookies response:", dbgBody);
-        } catch (e) {
-          console.log("[signin-debug] debug-cookies fetch failed:", e);
-        }
-        // Use router so middleware re-evaluates server-side. Then refresh
-        // to force any cached layouts to re-render with the new session.
-        router.push(next);
-        router.refresh();
+    if (flow === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setError(error.message);
         return;
       }
-
-      // flow === "signup"
-      // 1. Create the user via our direct INSERT route.
-      let signupRes: Response;
-      try {
-        signupRes = await fetch("/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim(), password }),
-        });
-      } catch {
-        setError("Network error during sign-up. Try again.");
-        return;
-      }
-
-      if (!signupRes.ok) {
-        const data = await signupRes.json().catch(() => ({}));
-        if (signupRes.status === 409) {
-          // Email already exists — switch to signin flow, keep password.
-          setFlow("signin");
-          setError("That email is already registered. Sign in with your password.");
-          return;
-        }
-        setError(data.error || "Sign-up failed. Try again.");
-        return;
-      }
-
-      // 2. Account created. Now sign in (with retry for Supabase consistency).
-      setInfo("Account created — signing you in…");
-      const ok = await signInWithRetry(email.trim(), password);
-      if (!ok) {
-        // Sign-in failed even after retries. Don't clear the password.
-        // Switch to signin mode so the user can click "Sign in" manually.
-        setFlow("signin");
-        setInfo(
-          "Account created, but automatic sign-in timed out. Click \"Sign in\" to continue.",
-        );
-        return;
-      }
-
-      // DEBUG: Same as above — see what cookies the browser has and what
-      // the server receives.
-      console.log("[signup-debug] After signInWithPassword, document.cookie length:", document.cookie.length);
-      console.log("[signup-debug] document.cookie preview:", document.cookie.slice(0, 200));
-      try {
-        const dbgRes = await fetch("/api/auth/debug-cookies", { credentials: "include" });
-        const dbgBody = await dbgRes.json();
-        console.log("[signup-debug] Server /api/auth/debug-cookies response:", dbgBody);
-      } catch (e) {
-        console.log("[signup-debug] debug-cookies fetch failed:", e);
-      }
-
-      // 3. Success — redirect.
-      router.push(next);
-      router.refresh();
-    } finally {
-      setBusy(false);
+      finish();
+      return;
     }
+
+    // flow === "signup"
+    // Use the server-side route to create the user. The route inserts
+    // directly into auth.users with crypt() + email_confirmed_at = now()
+    // so no confirmation email is sent.
+    let signupRes;
+    try {
+      signupRes = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+    } catch {
+      setError("Network error during sign-up. Try again.");
+      return;
+    }
+
+    if (!signupRes.ok) {
+      const data = await signupRes.json().catch(() => ({}));
+      setError(data.error || "Sign-up failed. Try again.");
+      return;
+    }
+
+    // Account created (and email_confirmed_at set). Now sign in client-side
+    // to obtain a session.
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (signInError) {
+      // Account was created but sign-in failed — rare, but tell the user
+      // to try signing in manually.
+      setInfo(
+        `Account created. Please sign in with your email and password.`,
+      );
+      setFlow("signin");
+      setPassword("");
+      return;
+    }
+    finish();
   }
 
   // --- Phone OTP ---
   async function sendOtp() {
-    if (busy) return;
     setError(null);
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phone.trim(),
-        options: { shouldCreateUser: true },
-      });
-      if (error) {
-        setError(error.message);
-        return;
-      }
-      setOtpSent(true);
-    } finally {
-      setBusy(false);
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: phone.trim(),
+      options: { shouldCreateUser: true },
+    });
+    if (error) {
+      setError(error.message);
+      return;
     }
+    setOtpSent(true);
   }
 
   async function verifyOtp() {
-    if (busy) return;
     setError(null);
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: phone.trim(),
-        token: otpCode.trim(),
-        type: "sms",
-      });
-      if (error) {
-        setError(error.message);
-        return;
-      }
-      router.push(next);
-      router.refresh();
-    } finally {
-      setBusy(false);
+    const { error } = await supabase.auth.verifyOtp({
+      phone: phone.trim(),
+      token: otpCode.trim(),
+      type: "sms",
+    });
+    if (error) {
+      setError(error.message);
+      return;
     }
+    finish();
   }
 
   // --- OAuth ---
   async function oauth(provider: "google" | "apple") {
-    if (busy) return;
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -291,32 +182,8 @@ export default function SignInForm() {
     if (error) setError(error.message);
   }
 
-  // Reset the flow when the user wants to edit the email.
-  function resetFlow() {
-    setFlow(null);
-    setPassword("");
-    setError(null);
-    setInfo(null);
-    setTimeout(() => {
-      document.getElementById("identifier")?.focus();
-    }, 50);
-  }
-
-  // Enter key handler for the email input.
-  function onEmailKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && email.trim() && !checkingEmail && !busy) {
-      e.preventDefault();
-      checkEmailAndContinue();
-    }
-  }
-
-  // Enter key handler for the password input.
-  function onPasswordKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && password.trim() && !busy && flow) {
-      e.preventDefault();
-      submitPassword();
-    }
-  }
+  // startTransition is reserved for future non-blocking navigations.
+  void startTransition;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -328,43 +195,6 @@ export default function SignInForm() {
           ← Back
         </Link>
       </div>
-
-      {/* === TEMP DEBUG PANEL ===
-          Shows whether the browser environment can set+read cookies.
-          If testCookieWorks=false, cookies are disabled (likely a
-          sandboxed iframe) and the auth flow will fail because
-          supabase.auth.signInWithPassword can't persist the session. */}
-      {envDebug && (
-        <div
-          className="mx-auto mt-4 max-w-3xl border-2 border-dashed border-amber-500/50 bg-amber-50/50 p-3 font-mono text-xs dark:bg-amber-950/20"
-          style={{ whiteSpace: "pre-wrap" }}
-        >
-          <div className="mb-1 font-bold text-amber-700 dark:text-amber-400">
-            [DEBUG] Browser environment
-          </div>
-          <div>origin: {envDebug.origin}</div>
-          <div>isIframe: {String(envDebug.isIframe)}</div>
-          <div>navigator.cookieEnabled: {String(envDebug.cookieEnabled)}</div>
-          <div>document.cookie length on mount: {envDebug.cookieLengthOnMount}</div>
-          <div>
-            testCookieWorks:{" "}
-            <span
-              className={
-                envDebug.testCookieWorks ? "text-green-600" : "text-red-600 font-bold"
-              }
-            >
-              {String(envDebug.testCookieWorks)}
-            </span>
-          </div>
-          {envDebug.testCookieWorks === false && (
-            <div className="mt-2 text-red-700 dark:text-red-400">
-              ⚠ Cookies cannot be set in this browser environment. The Supabase
-              session cookie cannot be persisted, so login will fail. This is
-              likely because the page is rendered inside a sandboxed iframe.
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-16 px-6 py-14 md:px-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-24 lg:py-24">
         {/* Left: logo */}
@@ -380,7 +210,7 @@ export default function SignInForm() {
         <div className="w-full max-w-md justify-self-center lg:justify-self-end">
           <button
             type="button"
-            disabled={busy}
+            disabled={pending}
             onClick={() => setShowPhone(!showPhone)}
             className="flex h-14 w-full items-center justify-center gap-3 rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
@@ -404,7 +234,7 @@ export default function SignInForm() {
             {!otpSent ? (
               <button
                 type="button"
-                disabled={!phone.trim() || busy}
+                disabled={!phone.trim() || pending}
                 onClick={sendOtp}
                 className={`mt-2 flex h-12 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
                   !phone.trim() ? "pointer-events-none opacity-40" : ""
@@ -424,7 +254,7 @@ export default function SignInForm() {
                 />
                 <button
                   type="button"
-                  disabled={otpCode.trim().length < 6 || busy}
+                  disabled={otpCode.trim().length < 6 || pending}
                   onClick={verifyOtp}
                   className={`mt-2 flex h-12 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
                     otpCode.trim().length < 6 ? "pointer-events-none opacity-40" : ""
@@ -438,7 +268,7 @@ export default function SignInForm() {
 
           <button
             type="button"
-            disabled={busy}
+            disabled={pending}
             onClick={() => oauth("google")}
             className="mt-3 flex h-14 w-full items-center justify-center gap-3 rounded-full border border-border bg-background font-medium text-foreground transition-colors hover:bg-surface disabled:opacity-50"
           >
@@ -447,7 +277,7 @@ export default function SignInForm() {
 
           <button
             type="button"
-            disabled={busy}
+            disabled={pending}
             onClick={() => oauth("apple")}
             className="mt-3 flex h-14 w-full items-center justify-center gap-3 rounded-full border border-border bg-background font-medium text-foreground transition-colors hover:bg-surface disabled:opacity-50"
           >
@@ -460,13 +290,7 @@ export default function SignInForm() {
             <span className="h-px flex-1 bg-border" />
           </div>
 
-          {/* === Email + Password section ===
-              Single-button flow:
-              - flow === null: show email input + "Continue" button
-              - flow !== null: show email (read-only with "edit" link) + password input + "Sign in" / "Create account" button
-              Never both buttons at the same time. */}
-
-          {/* Email input — always visible. Becomes read-only once flow is set. */}
+          {/* Email input */}
           <div>
             <label htmlFor="identifier" className="sr-only">
               Email or username
@@ -477,72 +301,51 @@ export default function SignInForm() {
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
-                // Reset flow when email changes after a flow was set.
+                // Reset flow when email changes — need to re-check before submit
                 if (flow) setFlow(null);
               }}
-              onKeyDown={onEmailKeyDown}
               placeholder="Email or username"
-              disabled={busy}
-              readOnly={!!flow}
-              className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none disabled:opacity-70"
+              className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
             />
-
-            {/* If flow is set, show an "edit email" link below the read-only input */}
-            {flow && (
-              <button
-                type="button"
-                onClick={resetFlow}
-                className="mt-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                Use a different email
-              </button>
-            )}
-          </div>
-
-          {/* The single primary action button. Label + behavior depend on `flow`. */}
-          {!flow ? (
-            // No flow yet → "Continue" (check email)
             <button
               type="button"
-              disabled={!email.trim() || checkingEmail || busy}
+              disabled={!email.trim() || checkingEmail || pending}
               onClick={checkEmailAndContinue}
               className="mt-4 h-14 w-full rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 disabled:bg-border disabled:text-muted-foreground"
             >
               {checkingEmail ? "Checking…" : "Continue"}
             </button>
-          ) : (
-            // Flow is set → password input + "Sign in" / "Create account"
-            <div className="mt-4">
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={onPasswordKeyDown}
-                placeholder={flow === "signup" ? "Create a password (min 8 chars)" : "Password"}
-                disabled={busy}
-                autoFocus
-                className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none disabled:opacity-70"
-              />
-              <button
-                type="button"
-                disabled={!password.trim() || busy}
-                onClick={submitPassword}
-                className="mt-3 flex h-14 w-full items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {busy
-                  ? flow === "signup"
-                    ? "Creating account…"
-                    : "Signing in…"
-                  : flow === "signup"
-                    ? "Create account"
-                    : "Sign in"}
-              </button>
-            </div>
-          )}
+          </div>
+
+          {/* Password — slow reveal after email check resolves the flow */}
+          <div
+            className={`grid transition-all duration-500 ease-in-out ${
+              flow ? "mt-4 max-h-40 opacity-100" : "mt-0 max-h-0 opacity-0"
+            }`}
+            style={{ overflow: flow ? "visible" : "hidden" }}
+          >
+            <label htmlFor="password" className="sr-only">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={flow === "signup" ? "Create a password" : "Password"}
+              className="h-14 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={!password.trim() || pending}
+              onClick={submitPassword}
+              className={`mt-3 flex h-14 items-center justify-center rounded-full bg-foreground font-medium text-background transition-opacity hover:opacity-90 ${
+                !password.trim() ? "pointer-events-none opacity-40" : ""
+              }`}
+            >
+              {flow === "signup" ? "Create account" : "Sign in"}
+            </button>
+          </div>
 
           {error && (
             <p className="mt-4 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
