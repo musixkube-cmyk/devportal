@@ -324,3 +324,37 @@ Stage Summary:
 - 27-domain sample data seeded (one row per domain minimum).
 - RLS is ENABLED on all tables but uses permissive policies for now (dev environment). The schema.md RLS policies have UUID/text cast bugs — proper policies are a follow-up task, not a blocker.
 - Prisma schema (prisma/schema.prisma) is now stale — it still references the old camelCase ApiKey/ApiKeyEvent/UsageDaily/Webhook models. Either regenerate it with `npx prisma db pull` or leave it unused (the runtime code uses pgPool directly, not Prisma Client, for these tables).
+
+---
+Task ID: session-wrap-2026-08-16
+Agent: main
+Task: Pre-push credential scrub + commit today's work to GitHub.
+
+Work Log:
+- Audited every tracked + untracked file for actual secret material (full JWT strings + signing key).
+- Distinguished real secrets (full JWT `header.payload.signature`) from generic HS256 JWT-header prefixes (`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`) — the latter is identical on every HS256 JWT in the world and is NOT a secret, so doc/api-reference files containing only the truncated prefix are safe.
+- Verified the actual signing key (Supabase JWT signature) was present in EXACTLY two places: upload/MusicosyCREDS.md (gitignored, never tracked) and scripts/decode-creds.ts (added in local commit fe46b99, never pushed).
+- Deleted upload/MusicosyCREDS.md from disk per user explicit instruction.
+- Deleted scripts/decode-creds.ts from disk (one-off JWT decoder, no longer needed).
+- Hardened .gitignore: added /tool-results/, upload/*CREDS*.md, scripts/decode-creds.ts, scripts/*-creds.*, scripts/local-*.ts.
+- Used `git rebase -i origin/main` with `GIT_SEQUENCE_EDITOR="sed -i 's/^pick fe46b99/drop fe46b99/'"` to DROP commit fe46b99 entirely (that commit only added scripts/decode-creds.ts — no other content lost).
+- Verified post-rebase: fe46b99 gone, scripts/decode-creds.ts no longer in any commit's tree, signing key no longer in any tracked file.
+- Committed .gitignore hygiene update as fb8e76b "chore(safety): gitignore cred scratch areas".
+- Final pre-push audit (5 checks): all PASS — no full JWT, no signing key, no MusicosyCREDS.md, no decode-creds.ts, no .env files in HEAD tree.
+- Push to origin/main blocked: GitHub PAT was only stored in upload/MusicosyCREDS.md (now deleted) and no credential helper / netrc / env var is configured. Handed off to user to push from their own terminal.
+
+Stage Summary:
+- 11 local commits ready to push to origin/main (was 12 — dropped the cred-bearing fe46b99).
+- HEAD tree is verified clean of all secrets.
+- Branch state: `main` is 11 commits ahead of `origin/main`.
+- PUSH COMMAND (user runs from their own terminal where GitHub auth is set up):
+    cd /home/z/my-project && git push origin main
+- If user prefers to have the assistant push, they need to provide a fresh GitHub PAT (fine-grained, scope: repo:push to musixkube-cmyk/devportal). DO NOT paste the PAT into a file — set it as an env var and use:
+    GH_TOKEN=<pat> git push https://x-access-token:$GH_TOKEN@github.com/musixkube-cmyk/devportal.git main
+- Outstanding items to pick up tomorrow:
+  1. Apply full uploaded schema (170 tables across 27 domains) to live Supabase DB — user explicit demand, not yet done.
+  2. Resolve schema conflicts: public.users duplicate, api_keys snake_case vs camelCase mismatch.
+  3. Update prisma/schema.prisma to reflect full 170-table schema (currently stale, only has 7 camelCase models).
+  4. Apply RLS policies from schema.md (currently RLS is ON but policies are permissive — UUID/text cast bugs in schema.md policies need fixing).
+  5. Investigate "Praghql" — user mentioned using this, not yet researched.
+  6. Rotate Supabase anon + service_role keys as defense-in-depth (the actual signing key was never pushed to remote, but hygiene-wise rotation is cheap).
