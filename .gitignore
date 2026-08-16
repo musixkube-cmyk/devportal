@@ -61,6 +61,16 @@ server.log
 
 # Upload scratch area (may contain pasted creds/screenshots)
 /upload/
+upload/MusicosyCREDS.md
+upload/*CREDS*.md
+
+# Tool-results scratch area (may contain pasted secrets from file reads)
+/tool-results/
 
 # Cloned reference repos (private)
 /repos/
+
+# Local dev scripts that may contain hardcoded secrets
+scripts/decode-creds.ts
+scripts/*-creds.*
+scripts/local-*.ts
